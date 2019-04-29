@@ -2,10 +2,10 @@ import os
 import sys
 import hashlib
 
-KEYS = ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P", "A", "S", "D", "F", "G", "H", "J", "K", "L", "Z", "X", "C", "V", "B", "N", "M", "Space"]
+KEYS = ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P", "A", "S", "D", "F", "G", "H", "J", "K", "L", "Z", "X", "C", "V", "B", "N", "M", "Space", "LShiftKey", "RShiftKey", "Back", "Oemcomma", "OemPeriod", "NumPad0", "NumPad1", "NumPad2", "NumPad3", "NumPad4", "NumPad5", "NumPad6", "NumPad7", "NumPad8", "NumPad9", "D0", "D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "D9"]
 
 
-def parse_raw_data(read_path, write_path, session_fraction=1, special_keys=True):
+def parse_raw_data(read_path, write_path, session_fraction=1, special_keys=False):
 
 	filenames = list()
 	for (dirpath, dirnames, _filenames) in os.walk(read_path):
