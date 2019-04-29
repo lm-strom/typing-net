@@ -5,7 +5,7 @@ import hashlib
 KEYS = ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P", "A", "S", "D", "F", "G", "H", "J", "K", "L", "Z", "X", "C", "V", "B", "N", "M", "Space", "LShiftKey", "RShiftKey", "Back", "Oemcomma", "OemPeriod", "NumPad0", "NumPad1", "NumPad2", "NumPad3", "NumPad4", "NumPad5", "NumPad6", "NumPad7", "NumPad8", "NumPad9", "D0", "D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "D9"]
 
 
-def parse_raw_data(read_path, write_path, session_fraction=1, special_keys=False):
+def parse_raw_data(read_path, write_path, session_fraction=1, special_keys=True):
 
 	filenames = list()
 	for (dirpath, dirnames, _filenames) in os.walk(read_path):
@@ -26,9 +26,11 @@ def parse_raw_data(read_path, write_path, session_fraction=1, special_keys=False
 		output = []
 
 		with open(file_name, "r") as file:
+			print file_name
 
-			pressedDown = {} # (key : time)
-			lastPressTime = None
+			openDigraphs = {} # first_key||second_key : [first_PT, first_RT, second_PT, second_RT]
+			openDigraphLookup = [[],[]] # [[key, ...], [[first_key||second_key, first_or_second=0/1], ...]]
+			lastPressedKey = None # (key, PT, RT)
 
 			for i, line in enumerate(file):
 
@@ -41,21 +43,49 @@ def parse_raw_data(read_path, write_path, session_fraction=1, special_keys=False
 					continue
 
 				if action == "KeyDown":
-					pressedDown[key] = time
-
-					if lastPressTime != None:
-						gapTime = int(time) - int(lastPressTime)
-						if gapTime < 1000:
-							output.append(("0", gapTime))
-
-					lastPressTime = time
-
-				elif action == "KeyUp":
-					try:
-						keyHash = str(int(hashlib.md5(str.encode(key)).hexdigest()[0:5], 16))
-						output.append((keyHash, int(time) - int(pressedDown.pop(key))))
+					try: #fail if first digraph
+						digraph = lastPressedKey[0] + "+" + key
+						openDigraphs[digraph] = [lastPressedKey[1], lastPressedKey[2], time, None]
+						openDigraphLookup[0].append(lastPressedKey[0])
+						openDigraphLookup[1].append((digraph, 0))
+						openDigraphLookup[0].append(key)
+						openDigraphLookup[1].append((digraph, 1)) 
 					except:
 						pass
+					lastPressedKey = (key, time, None)
+
+				elif action == "KeyUp":
+					for index in [i for i, x in enumerate(openDigraphLookup[0]) if x == key]:
+						digraph = openDigraphLookup[1][index][0]
+						firstOrSecond = openDigraphLookup[1][index][1]
+						print digraph
+						openDigraphs[digraph][1+2*firstOrSecond] = time
+
+						if None not in openDigraphs[digraph]:
+							# Append to output
+							ht1 = int(openDigraphs[digraph][1]) - int(openDigraphs[digraph][0])
+							ht2 = int(openDigraphs[digraph][3]) - int(openDigraphs[digraph][2])
+							ptp = int(openDigraphs[digraph][2]) - int(openDigraphs[digraph][0])
+							rtp = int(openDigraphs[digraph][2]) - int(openDigraphs[digraph][1])
+							key1 = digraph.split("+")[0]
+							key2 = digraph.split("+")[1]
+							output.append((key1, key2, ht1, ht2, ptp, rtp))
+							#delete digraph from openDigraphs
+							del openDigraphs[digraph]
+							#delete key->digraph from lookup
+							indecisToDelete = []
+							for index2 in [i for i, x in enumerate(openDigraphLookup[0]) if x == key1 or x == key2]:
+								if openDigraphLookup[1][index2][0] == digraph:
+									indecisToDelete.append(index2)
+
+					try:
+						print indecisToDelete
+						for index in indecisToDelete[::-1]:
+							del openDigraphLookup[0][index]
+							del openDigraphLookup[1][index]
+					except:
+						pass
+					
 
 			# Write processed data to file
 			try:
