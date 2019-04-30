@@ -7,7 +7,7 @@ from tqdm import tqdm
 KEYS = ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P", "A", "S", "D", "F", "G", "H", "J", "K", "L", "Z", "X", "C", "V", "B", "N", "M", "Space", "LShiftKey", "RShiftKey", "Back", "Oemcomma", "OemPeriod", "NumPad0", "NumPad1", "NumPad2", "NumPad3", "NumPad4", "NumPad5", "NumPad6", "NumPad7", "NumPad8", "NumPad9", "D0", "D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "D9"]
 
 
-def parse_raw_data(read_path, write_path, session_fraction=1, special_keys=True):
+def parse_raw_data(read_path, write_path, session_fraction=1, special_keys=False):
 
 	filenames = list()
 	for (dirpath, dirnames, _filenames) in os.walk(read_path):
@@ -52,12 +52,6 @@ def parse_raw_data(read_path, write_path, session_fraction=1, special_keys=True)
 							else:
 								break
 			
-			# for i in range(len(pressedKeys)):
-			# 	if i == len(pressedKeys) - 1:
-			# 		break
-			# 	output.append(pressedKeys[i])
-
-			# Append to output
 			for i in range(len(pressedKeys)):
 				if i == len(pressedKeys) - 1:
 					break
@@ -68,7 +62,8 @@ def parse_raw_data(read_path, write_path, session_fraction=1, special_keys=True)
 					rtp = int(pressedKeys[i+1][1]) - int(pressedKeys[i][2])
 					key1 = pressedKeys[i][0]
 					key2 = pressedKeys[i+1][0]
-					output.append((key1, key2, ht1, ht2, ptp, rtp))
+					if ptp < 1000 and abs(rtp) < 1000:
+						output.append((key1, key2, ht1, ht2, ptp, rtp))
 				except:
 					pass
 
@@ -79,7 +74,6 @@ def parse_raw_data(read_path, write_path, session_fraction=1, special_keys=True)
 				pass
 			try:
 				with open(write_file, "a") as file:
-					print "APPENDING"
 					for entry in output:
 						file.write(entry[0] + " " + entry[1] + " " + str(entry[2]) + " " + str(entry[3]) + " " + str(entry[4]) + " " + str(entry[5]) + "\n")
 					file.close()
