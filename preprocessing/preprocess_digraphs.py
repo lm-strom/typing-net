@@ -1,4 +1,5 @@
 import os
+import shutil
 import sys
 import hashlib
 from tqdm import tqdm
@@ -27,10 +28,8 @@ def parse_raw_data(read_path, write_path, session_fraction=1, special_keys=True)
 		output = []
 
 		with open(file_name, "r") as file:
-			print file_name
 
-			openDigraphs = {} # first_key||second_key : [first_PT, first_RT, second_PT, second_RT]
-			lastPressedKey = None # (key, PT, RT)
+			pressedKeys = [] # [[key, PT, RT], ...]
 
 			for i, line in enumerate(file):
 
@@ -43,51 +42,53 @@ def parse_raw_data(read_path, write_path, session_fraction=1, special_keys=True)
 					continue
 
 				if action == "KeyDown":
-					if lastPressedKey != None:
-						digraph = lastPressedKey[0] + "+" + key
-						openDigraphs[digraph] = [lastPressedKey[1], lastPressedKey[2], time, None]
-					lastPressedKey = [key, time, None]
-
+					pressedKeys.append([key, time, None])
+				
 				elif action == "KeyUp":
+					for pressedKey in pressedKeys[::-1]:
+						if pressedKey[0] == key:
+							if pressedKey[2] == None:
+								pressedKey[2] = time
+							else:
+								break
+			
+			# for i in range(len(pressedKeys)):
+			# 	if i == len(pressedKeys) - 1:
+			# 		break
+			# 	output.append(pressedKeys[i])
 
-					if bool(openDigraphs) == False and lastPressedKey != None:
-						lastPressedKey[2] = time
-
-					deleteSet = []
-					for key_iterator in openDigraphs:
-
-						if key not in key_iterator.split("+"):
-							continue
-
-						#update digraph containing key
-						firstOrSecond = int(key_iterator.split("+")[1] == key)
-						openDigraphs[key_iterator][1+2*firstOrSecond] = time
-
-						#if digraph finished
-						if None not in openDigraphs[key_iterator]:
-
-							# Append to output
-							ht1 = int(openDigraphs[key_iterator][1]) - int(openDigraphs[key_iterator][0])
-							ht2 = int(openDigraphs[key_iterator][3]) - int(openDigraphs[key_iterator][2])
-							ptp = int(openDigraphs[key_iterator][2]) - int(openDigraphs[key_iterator][0])
-							rtp = int(openDigraphs[key_iterator][2]) - int(openDigraphs[key_iterator][1])
-							key1 = key_iterator.split("+")[0]
-							key2 = key_iterator.split("+")[1]
-							output.append((key1, key2, ht1, ht2, ptp, rtp))
-
-							#delete digraph from openDigraphs
-							deleteSet.append(key_iterator)
-					for digraph in deleteSet:
-						del openDigraphs[digraph]
+			# Append to output
+			for i in range(len(pressedKeys)):
+				if i == len(pressedKeys) - 1:
+					break
+				try:
+					ht1 = int(pressedKeys[i][2]) - int(pressedKeys[i][1])
+					ht2 = int(pressedKeys[i+1][2]) - int(pressedKeys[i+1][1])
+					ptp = int(pressedKeys[i+1][1]) - int(pressedKeys[i][1])
+					rtp = int(pressedKeys[i+1][1]) - int(pressedKeys[i][2])
+					key1 = pressedKeys[i][0]
+					key2 = pressedKeys[i+1][0]
+					output.append((key1, key2, ht1, ht2, ptp, rtp))
+				except:
+					pass
 
 			# Write processed data to file
 			try:
 				os.makedirs(write_file[:-8])
 			except:
 				pass
-			with open(write_file, "w+") as file:
-				for entry in output:
-					file.write(entry[0] + " " + entry[1] + " " + str(entry[2]) + " " + str(entry[3]) + " " + str(entry[4]) + " " + str(entry[5]) + "\n")
+			try:
+				with open(write_file, "a") as file:
+					print "APPENDING"
+					for entry in output:
+						file.write(entry[0] + " " + entry[1] + " " + str(entry[2]) + " " + str(entry[3]) + " " + str(entry[4]) + " " + str(entry[5]) + "\n")
+					file.close()
+			except:
+				with open(write_file, "w+") as file:
+					for entry in output:
+						file.write(entry[0] + " " + entry[1] + " " + str(entry[2]) + " " + str(entry[3]) + " " + str(entry[4]) + " " + str(entry[5]) + "\n")
+					file.close()
+
 
 
 def main():
@@ -105,9 +106,13 @@ def main():
 		if not(ans == "" or ans.lower() == "y" or ans.lower() == "yes"):
 			exit()
 
-	# Creates paths for the preprocessed data
-	if not os.path.exists(processedDataPath):
-		os.mkdir(processedDataPath)
+	# Creates fresh path for the preprocessed data
+	if os.path.exists(processedDataPath):
+		if "processed_data" not in processedDataPath:
+			print "Processed data path must include \"processed_data\" as a precaution."
+		else:
+			shutil.rmtree(processedDataPath)
+	os.mkdir(processedDataPath)
 
 
 	if len(sys.argv) == 3:
