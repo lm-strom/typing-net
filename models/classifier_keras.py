@@ -3,12 +3,13 @@ import numpy as np
 from tqdm import tqdm
 
 from keras import optimizers
-from keras.models import Sequential
+from keras.models import Sequential, Model
 from keras.layers import Dense, Flatten
 from keras.layers import Conv1D, MaxPooling1D
+from keras.layers import Input, Concatenate
 from keras.layers import GRU
 
-DATA_PATH = "/Users/Hannes/Documents/typing-net/data/processed_data/"
+DATA_PATH = "/Users/Hannes/Downloads/typing-net/data/processed_data/"
 
 # Constants
 FEATURE_LENGTH = 6
@@ -27,16 +28,31 @@ def build_model(input_shape, n_classes):
 	Builds classifier model (CNN + RNN)
 	"""
 
-	model = Sequential()
-	model.add(Conv1D(32, 2, activation="sigmoid", input_shape=input_shape))
-	model.add(Conv1D(32, 2, activation="relu"))
-	model.add(Conv1D(32, 2, activation="relu"))
-	model.add(MaxPooling1D())
-	model.add(Flatten())
-	model.add(Dense(n_classes*8, activation="sigmoid"))
-	model.add(Dense(n_classes*4, activation="relu"))
-	model.add(Dense(n_classes, activation="softmax"))
-	# model.add(GRU(units=n_classes, activation="softmax"))
+	new_input_shape = (int(input_shape[0]/2), input_shape[1])
+
+	inp1 = Input(shape=new_input_shape)
+	inp2 = Input(shape=new_input_shape)
+
+	conv1_1 = Conv1D(32, 2, activation="sigmoid", input_shape=input_shape)(inp1)
+	conv2_1 = Conv1D(32, 2, activation="sigmoid", input_shape=input_shape)(inp2)
+	conv1_2 = Conv1D(32, 2, activation="relu", input_shape=input_shape)(conv1_1)
+	conv2_2 = Conv1D(32, 2, activation="relu", input_shape=input_shape)(conv2_1)
+	maxp1 = MaxPooling1D()(conv1_2)
+	maxp2 = MaxPooling1D()(conv2_2)
+	flatten1 = Flatten()(maxp1)
+	flatten2 = Flatten()(maxp2)
+	dense1_1 = Dense(n_classes*8, activation="sigmoid")(flatten1)
+	dense2_1 = Dense(n_classes*8, activation="sigmoid")(flatten2)
+	dense1_2 = Dense(n_classes*4, activation="relu")(dense1_1)
+	dense2_2 = Dense(n_classes*4, activation="relu")(dense2_1)
+	dense1_3 = Dense(n_classes, activation="softmax")(dense1_2)
+	dense2_3 = Dense(n_classes, activation="softmax")(dense2_2)
+
+	mrg = Concatenate()([dense1_3, dense2_3])
+	dense = Dense(n_classes, activation="relu")(mrg)
+	op = Dense(n_classes, activation="softmax")(dense)
+
+	model = Model(input=[inp1, inp2], output=op)
 
 	print(model.summary())
 
@@ -151,6 +167,16 @@ def main():
 	# Split that shit
 	X_train, y_train, X_valid, y_valid, X_test, y_test = split_data(X, y, train_frac=0.8, valid_frac=0.1, test_frac=0.1)
 
+	X_train1 = X_train[:,:int(int(EXAMPLE_LENGTH/2)),:]
+	X_train2 = X_train[:,int(int(EXAMPLE_LENGTH/2)):,:]
+
+	X_valid1 = X_valid[:,:int(int(EXAMPLE_LENGTH/2)),:]
+	X_valid2 = X_valid[:,int(EXAMPLE_LENGTH/2):,:]
+
+	X_test1 = X_test[:,:int(EXAMPLE_LENGTH/2),:]
+	X_test2 = X_test[:,int(EXAMPLE_LENGTH/2):,:]
+
+
 	# Build model
 	input_shape = X_train.shape[1:]
 	n_classes = y_train.shape[1]
@@ -159,10 +185,10 @@ def main():
 	# Train model
 	adam_optimizer = optimizers.Adam(lr=LEARNING_RATE)
 	model.compile(loss="categorical_crossentropy", optimizer=adam_optimizer, metrics=["accuracy"])
-	model.fit(X_train, y_train, validation_data=(X_valid, y_valid), batch_size=BATCH_SIZE, epochs=EPOCHS)
+	model.fit([X_train1, X_train2], y_train, validation_data=([X_valid1, X_valid2], y_valid), batch_size=BATCH_SIZE, epochs=EPOCHS)
 
 	# Test model
-	loss, accuracy = model.evaluate(X_test, y_test, verbose=1)
+	loss, accuracy = model.evaluate([X_test1, X_test2], y_test, verbose=1)
 
 	print("\n---- Test Results ----")
 	print("Test loss = {}, Test accuracy = {}".format(loss, accuracy))
