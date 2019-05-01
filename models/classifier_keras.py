@@ -29,10 +29,11 @@ def build_model(input_shape, n_classes):
 
 	model = Sequential()
 	model.add(Conv1D(32, 2, activation="relu", input_shape=input_shape))
+	model.add(Conv1D(32, 2, activation="sigmoid"))
 	model.add(MaxPooling1D())
 	model.add(Flatten())
-	model.add(Dense(n_classes*4, activation="sigmoid"))
-	model.add(Dense(n_classes*4, activation="sigmoid"))
+	model.add(Dense(n_classes*8, activation="sigmoid"))
+	model.add(Dense(n_classes*4, activation="relu"))
 	model.add(Dense(n_classes, activation="softmax"))
 	# model.add(GRU(units=n_classes, activation="softmax"))
 
