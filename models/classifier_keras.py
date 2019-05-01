@@ -8,7 +8,7 @@ from keras.layers import Dense, Flatten
 from keras.layers import Conv1D, MaxPooling1D
 from keras.layers import GRU
 
-DATA_PATH = "preprocessed_data/data/"
+DATA_PATH = "/Users/Hannes/Downloads/typing-net/data/processed_data/UB_keystroke_dataset/raw_data/"
 
 # Hyperparameters
 EXAMPLE_LENGTH = 50
