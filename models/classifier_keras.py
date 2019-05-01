@@ -8,18 +8,18 @@ from keras.layers import Dense, Flatten
 from keras.layers import Conv1D, MaxPooling1D
 from keras.layers import GRU
 
-DATA_PATH = "/Users/Hannes/Downloads/typing-net/data/processed_data/UB_keystroke_dataset/raw_data/"
+DATA_PATH = "/Users/Hannes/Downloads/typing-net/data/processed_data/UB_keystroke_dataset/new_data/"
 
 # Constants
 FEATURE_LENGTH = 6
 
 # Hyperparameters
-EXAMPLE_LENGTH = 50
+EXAMPLE_LENGTH = 20
 
-EPOCHS = 10
+EPOCHS = 2000
 DROPOUT_RATE = 0.1  # currently not used
 BATCH_SIZE = 32
-LEARNING_RATE = 1e-3
+LEARNING_RATE = 3e-4
 
 
 def build_model(input_shape, n_classes):
@@ -32,6 +32,7 @@ def build_model(input_shape, n_classes):
     #model.add(Conv1D(32, 2, activation="relu", input_shape=input_shape))
     #model.add(MaxPooling1D())
     #model.add(Flatten())
+    model.add(Dense(n_classes*2, activation="relu", input_shape=input_shape))
     model.add(Dense(n_classes*2, activation="relu", input_shape=input_shape))
     model.add(Dense(n_classes, activation="softmax"))
     # model.add(GRU(units=n_classes, activation="softmax"))
