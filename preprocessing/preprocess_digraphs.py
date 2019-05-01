@@ -20,8 +20,7 @@ def parse_raw_data(read_path, write_path, session_fraction=1, special_keys=False
 		if filepath[-1][0] == ".":
 			continue
 		subPath = ""
-		for entry in filepath[-3:-1]:
-			subPath += "/" + entry
+		
 		user_id = filepath[-1][:3]
 		write_file = write_path + subPath + "/" + user_id + ".txt"
 
