@@ -14,12 +14,12 @@ DATA_PATH = "/Users/Hannes/Documents/typing-net/data/processed_data/"
 FEATURE_LENGTH = 6
 
 # Hyperparameters
-EXAMPLE_LENGTH = 20
+EXAMPLE_LENGTH = 18
 
 EPOCHS = 100
 DROPOUT_RATE = 0.1  # currently not used
 BATCH_SIZE = 32
-LEARNING_RATE = 2e-4
+LEARNING_RATE = 3e-4
 
 
 def build_model(input_shape, n_classes):
@@ -29,6 +29,7 @@ def build_model(input_shape, n_classes):
 
 	model = Sequential()
 	model.add(Conv1D(32, 2, activation="sigmoid", input_shape=input_shape))
+	model.add(Conv1D(32, 2, activation="relu"))
 	model.add(Conv1D(32, 2, activation="relu"))
 	model.add(MaxPooling1D())
 	model.add(Flatten())
