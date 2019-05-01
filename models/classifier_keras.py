@@ -16,10 +16,10 @@ FEATURE_LENGTH = 6
 # Hyperparameters
 EXAMPLE_LENGTH = 20
 
-EPOCHS = 2000
+EPOCHS = 100
 DROPOUT_RATE = 0.1  # currently not used
 BATCH_SIZE = 32
-LEARNING_RATE = 3e-4
+LEARNING_RATE = 2.5e-4
 
 
 def build_model(input_shape, n_classes):
@@ -31,8 +31,10 @@ def build_model(input_shape, n_classes):
 	#model.add(Conv1D(32, 2, activation="relu", input_shape=input_shape))
 	#model.add(MaxPooling1D())
 	#model.add(Flatten())
-	model.add(Dense(n_classes*2, activation="relu", input_shape=input_shape))
-	model.add(Dense(n_classes*2, activation="relu", input_shape=input_shape))
+	model.add(Dense(n_classes*8, activation="sigmoid", input_shape=input_shape))
+	model.add(Dense(n_classes*4, activation="relu"))
+	model.add(Dense(n_classes*4, activation="relu"))
+	model.add(Dense(n_classes*4, activation="relu"))
 	model.add(Dense(n_classes, activation="softmax"))
 	# model.add(GRU(units=n_classes, activation="softmax"))
 
