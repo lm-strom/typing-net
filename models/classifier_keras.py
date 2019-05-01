@@ -8,7 +8,7 @@ from keras.layers import Dense, Flatten
 from keras.layers import Conv1D, MaxPooling1D
 from keras.layers import GRU
 
-DATA_PATH = "/Users/Hannes/Documents/typing-net/data/processed_data/"
+DATA_PATH = "/Users/Hannes/Downloads/typing-net/data/10_users/"
 
 # Constants
 FEATURE_LENGTH = 6
