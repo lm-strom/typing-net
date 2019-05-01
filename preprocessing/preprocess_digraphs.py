@@ -64,8 +64,8 @@ def parse_raw_data(read_path, write_path, session_fraction=1, special_keys=False
 					key2 = pressedKeys[i+1][0]
 					if ptp < 1000 and abs(rtp) < 1000:
 						if hash_keys:
-							key1Hash = str(int(hashlib.md5(str.encode(key1)).hexdigest()[0:5] % NUM_HASHES, 16))
-							key2Hash = str(int(hashlib.md5(str.encode(key2)).hexdigest()[0:5] % NUM_HASHES, 16))
+							key1Hash = str(int(hashlib.md5(str.encode(key1)).hexdigest()[0:5], 16) % NUM_HASHES)
+							key2Hash = str(int(hashlib.md5(str.encode(key2)).hexdigest()[0:5], 16) % NUM_HASHES)
 							output.append((key1Hash, key2Hash, ht1, ht2, ptp, rtp))
 						else:
 							output.append((key1, key2, ht1, ht2, ptp, rtp))
