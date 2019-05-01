@@ -19,7 +19,7 @@ EXAMPLE_LENGTH = 20
 EPOCHS = 100
 DROPOUT_RATE = 0.1  # currently not used
 BATCH_SIZE = 32
-LEARNING_RATE = 2.5e-4
+LEARNING_RATE = 2e-4
 
 
 def build_model(input_shape, n_classes):
@@ -28,13 +28,11 @@ def build_model(input_shape, n_classes):
 	"""
 
 	model = Sequential()
-	#model.add(Conv1D(32, 2, activation="relu", input_shape=input_shape))
-	#model.add(MaxPooling1D())
-	#model.add(Flatten())
-	model.add(Dense(n_classes*8, activation="sigmoid", input_shape=input_shape))
-	model.add(Dense(n_classes*4, activation="relu"))
-	model.add(Dense(n_classes*4, activation="relu"))
-	model.add(Dense(n_classes*4, activation="relu"))
+	model.add(Conv1D(32, 2, activation="relu", input_shape=input_shape))
+	model.add(MaxPooling1D())
+	model.add(Flatten())
+	model.add(Dense(n_classes*4, activation="sigmoid"))
+	model.add(Dense(n_classes*4, activation="sigmoid"))
 	model.add(Dense(n_classes, activation="softmax"))
 	# model.add(GRU(units=n_classes, activation="softmax"))
 
@@ -73,7 +71,7 @@ def load_data():
 	"""
 	Loads all data. Creates examples of length EXAMPLE_LENGTH.
 	Returns:
-	Matrix X of shape (#examples, example_len * feature_length)
+	Matrix X of shape (#examples, example_len, feature_length)
 	Matrix y of shape (#examples, #users)
 	"""
 
@@ -89,10 +87,10 @@ def load_data():
 		with open(DATA_PATH + user_file_name, "r") as user_file:
 			example = []
 			for line in user_file:
-				feature = map(int, line.split())
-				example.extend(feature)
+				feature = tuple(map(int, line.split()))
+				example.append(feature)
 
-				if len(example) == EXAMPLE_LENGTH * FEATURE_LENGTH:
+				if len(example) == EXAMPLE_LENGTH:
 					X.append(example)
 					y.append(i)
 					example = []
@@ -113,18 +111,18 @@ def split_data(X, y, train_frac, valid_frac, test_frac):
 
 	# Shuffle
 	perm = np.random.permutation(n_examples)
-	X = X[perm, :]
+	X = X[perm, :, :]
 	y = y[perm, :]
 
 	# Split
 	ind_1 = int(np.round(train_frac*n_examples))
 	ind_2 = int(np.round(ind_1 + valid_frac*n_examples))
 
-	X_train = X[0:ind_1, :]
+	X_train = X[0:ind_1, :,:]
 	y_train = y[0:ind_1, :]
-	X_valid = X[ind_1:ind_2, :]
+	X_valid = X[ind_1:ind_2, :,:]
 	y_valid = y[ind_1:ind_2, :]
-	X_test = X[ind_2:, :]
+	X_test = X[ind_2:, :,:]
 	y_test = y[ind_2:, :]
 
 
