@@ -10,24 +10,29 @@ from keras.layers import GRU
 
 DATA_PATH = "/Users/Hannes/Downloads/typing-net/data/processed_data/UB_keystroke_dataset/raw_data/"
 
+# Constants
+FEATURE_LENGTH = 6
+
 # Hyperparameters
 EXAMPLE_LENGTH = 50
 
 EPOCHS = 10
 DROPOUT_RATE = 0.1  # currently not used
 BATCH_SIZE = 32
-LEARNING_RATE = 1e-8
+LEARNING_RATE = 1e-3
 
 
 def build_model(input_shape, n_classes):
     """
     Builds classifier model (CNN + RNN)
     """
+    print(input_shape)
 
     model = Sequential()
-    model.add(Conv1D(32, 2, activation="relu", input_shape=input_shape))
-    model.add(MaxPooling1D())
-    model.add(Flatten())
+    #model.add(Conv1D(32, 2, activation="relu", input_shape=input_shape))
+    #model.add(MaxPooling1D())
+    #model.add(Flatten())
+    model.add(Dense(n_classes*2, activation="relu", input_shape=input_shape))
     model.add(Dense(n_classes, activation="softmax"))
     # model.add(GRU(units=n_classes, activation="softmax"))
 
@@ -66,7 +71,7 @@ def load_data():
     """
     Loads all data. Creates examples of length EXAMPLE_LENGTH.
     Returns:
-    Matrix X of shape (#examples, example_len, feature_length)
+    Matrix X of shape (#examples, example_len * feature_length)
     Matrix y of shape (#examples, #users)
     """
 
@@ -74,16 +79,19 @@ def load_data():
     y = []
 
     n_users = len(os.listdir(DATA_PATH))
+    print(os.listdir(DATA_PATH))
 
     print("Loading data...")
     for i, user_file_name in tqdm(enumerate(os.listdir(DATA_PATH))):
+        if user_file_name[0] == ".":
+            continue
         with open(DATA_PATH + user_file_name, "r") as user_file:
             example = []
             for line in user_file:
-                feature = tuple(map(int, line.split()))
-                example.append(feature)
+                feature = map(int, line.split())
+                example.extend(feature)
 
-                if len(example) == EXAMPLE_LENGTH:
+                if len(example) == EXAMPLE_LENGTH * FEATURE_LENGTH:
                     X.append(example)
                     y.append(i)
                     example = []
@@ -104,19 +112,20 @@ def split_data(X, y, train_frac, valid_frac, test_frac):
 
     # Shuffle
     perm = np.random.permutation(n_examples)
-    X = X[perm, :, :]
+    X = X[perm, :]
     y = y[perm, :]
 
     # Split
     ind_1 = int(np.round(train_frac*n_examples))
     ind_2 = int(np.round(ind_1 + valid_frac*n_examples))
 
-    X_train = X[0:ind_1, :, :]
+    X_train = X[0:ind_1, :]
     y_train = y[0:ind_1, :]
-    X_valid = X[ind_1:ind_2, :, :]
+    X_valid = X[ind_1:ind_2, :]
     y_valid = y[ind_1:ind_2, :]
-    X_test = X[ind_2:, :, :]
+    X_test = X[ind_2:, :]
     y_test = y[ind_2:, :]
+
 
     assert X_train.shape[0] + X_valid.shape[0] + X_test.shape[0] == n_examples, "Data split failed"
 
