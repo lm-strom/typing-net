@@ -6,6 +6,7 @@ from tqdm import tqdm
 
 KEYS = ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P", "A", "S", "D", "F", "G", "H", "J", "K", "L", "Z", "X", "C", "V", "B", "N", "M", "Space", "LShiftKey", "RShiftKey", "Back", "Oemcomma", "OemPeriod", "NumPad0", "NumPad1", "NumPad2", "NumPad3", "NumPad4", "NumPad5", "NumPad6", "NumPad7", "NumPad8", "NumPad9", "D0", "D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "D9"]
 
+NUM_HASHES = 1000
 
 def parse_raw_data(read_path, write_path, session_fraction=1, special_keys=False, hash_keys=True):
 
@@ -64,8 +65,8 @@ def parse_raw_data(read_path, write_path, session_fraction=1, special_keys=False
 					key2 = pressedKeys[i+1][0]
 					if ptp < 1000 and abs(rtp) < 1000:
 						if hash_keys:
-							key1Hash = str(int(hashlib.md5(str.encode(key1)).hexdigest()[0:2], 16))
-							key2Hash = str(int(hashlib.md5(str.encode(key2)).hexdigest()[0:2], 16))
+							key1Hash = str(int(hashlib.md5(str.encode(key1)).hexdigest()[0:5] % NUM_HASHES, 16))
+							key2Hash = str(int(hashlib.md5(str.encode(key2)).hexdigest()[0:5] % NUM_HASHES, 16))
 							output.append((key1Hash, key2Hash, ht1, ht2, ptp, rtp))
 						else:
 							output.append((key1, key2, ht1, ht2, ptp, rtp))
