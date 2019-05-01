@@ -4,7 +4,7 @@ from tqdm import tqdm
 
 from keras import optimizers
 from keras.models import Sequential
-# from keras.layers import Dense, Input, Dropout
+from keras.layers import Dense, Flatten
 from keras.layers import Conv1D, MaxPooling1D
 from keras.layers import GRU
 
@@ -13,7 +13,7 @@ DATA_PATH = "preprocessed_data/data/"
 # Hyperparameters
 EXAMPLE_LENGTH = 50
 
-EPOCHS = 1
+EPOCHS = 10
 DROPOUT_RATE = 0.1  # currently not used
 BATCH_SIZE = 32
 LEARNING_RATE = 1e-8
@@ -27,7 +27,11 @@ def build_model(input_shape, n_classes):
     model = Sequential()
     model.add(Conv1D(32, 2, activation="relu", input_shape=input_shape))
     model.add(MaxPooling1D())
-    model.add(GRU(units=n_classes, activation="softmax"))
+    model.add(Flatten())
+    model.add(Dense(n_classes, activation="softmax"))
+    # model.add(GRU(units=n_classes, activation="softmax"))
+
+    print(model.summary())
 
     return model
 
