@@ -33,7 +33,7 @@ def build_submodel(input_shape, n_classes):
 	model.add(Conv1D(32, 2, activation="sigmoid", input_shape=input_shape))
 	model.add(Conv1D(32, 2, activation="relu"))
 	model.add(Conv1D(32, 2, activation="relu"))
-	model.add(MaxPooling1D())
+	#model.add(MaxPooling1D())
 	model.add(Flatten())
 	model.add(Dense(n_classes*8, activation="sigmoid"))
 	model.add(Dense(n_classes*4, activation="relu"))
