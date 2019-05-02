@@ -1,4 +1,5 @@
 import os
+import sys
 import numpy as np
 from tqdm import tqdm
 
@@ -9,16 +10,14 @@ from keras.layers import Conv1D, MaxPooling1D
 from keras.layers import Input, Concatenate
 from keras.layers import GRU
 
-DATA_PATH = "/home/ubuntu/typing-net/data/processed_data/"
-
 # Constants
 FEATURE_LENGTH = 6
 
 # Hyperparameters
 EXAMPLE_LENGTH = 18
 
-EPOCHS_SUBMODEL = 30
-EPOCHS = 10
+EPOCHS_SUBMODEL = 50
+EPOCHS = 100
 DROPOUT_RATE = 0.1  # currently not used
 BATCH_SIZE = 32
 LEARNING_RATE = 3e-4
@@ -106,13 +105,21 @@ def load_data(example_length):
 	X = []
 	y = []
 
-	n_users = len(os.listdir(DATA_PATH))
+	if len(sys.argv) < 2:
+		print("Missing required arguments: input_path")
+		exit()
+
+	inputDataPath = sys.argv[1]
+	if inputDataPath[-1] != "/":
+		inputDataPath = inputDataPath + "/"
+
+	n_users = len(os.listdir(inputDataPath))
 
 	print("Loading data...")
-	for i, user_file_name in tqdm(enumerate(os.listdir(DATA_PATH))):
+	for i, user_file_name in tqdm(enumerate(os.listdir(inputDataPath))):
 		if user_file_name[0] == ".":
 			continue
-		with open(DATA_PATH + user_file_name, "r") as user_file:
+		with open(inputDataPath + user_file_name, "r") as user_file:
 			example = []
 			for line in user_file:
 				feature = tuple(map(int, line.split()))
