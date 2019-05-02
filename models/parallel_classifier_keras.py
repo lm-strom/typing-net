@@ -1,4 +1,5 @@
 import os
+import sys
 import numpy as np
 from tqdm import tqdm
 
@@ -8,8 +9,6 @@ from keras.layers import Dense, Flatten
 from keras.layers import Conv1D, MaxPooling1D
 from keras.layers import Input, Concatenate
 from keras.layers import GRU
-
-DATA_PATH = "/Users/Hannes/Downloads/typing-net/data/processed_data2/"
 
 # Constants
 FEATURE_LENGTH = 6
@@ -106,13 +105,21 @@ def load_data(example_length):
 	X = []
 	y = []
 
-	n_users = len(os.listdir(DATA_PATH))
+	if len(sys.argv) < 2:
+		print("Missing required arguments: input_path")
+		exit()
+
+	inputDataPath = sys.argv[1]
+	if inputDataPath[-1] != "/":
+		inputDataPath = inputDataPath + "/"
+
+	n_users = len(os.listdir(inputDataPath))
 
 	print("Loading data...")
-	for i, user_file_name in tqdm(enumerate(os.listdir(DATA_PATH))):
+	for i, user_file_name in tqdm(enumerate(os.listdir(inputDataPath))):
 		if user_file_name[0] == ".":
 			continue
-		with open(DATA_PATH + user_file_name, "r") as user_file:
+		with open(inputDataPath + user_file_name, "r") as user_file:
 			example = []
 			for line in user_file:
 				feature = tuple(map(int, line.split()))
