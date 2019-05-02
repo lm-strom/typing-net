@@ -9,7 +9,7 @@ from keras.layers import Conv1D, MaxPooling1D
 from keras.layers import Input, Concatenate
 from keras.layers import GRU
 
-DATA_PATH = "/Users/Hannes/Downloads/typing-net/data/processed_data/"
+DATA_PATH = "/Users/Hannes/Downloads/typing-net/data/processed_data2/"
 
 # Constants
 FEATURE_LENGTH = 6
@@ -17,7 +17,7 @@ FEATURE_LENGTH = 6
 # Hyperparameters
 EXAMPLE_LENGTH = 18
 
-EPOCHS_SUBMODEL = 60
+EPOCHS_SUBMODEL = 50
 EPOCHS = 100
 DROPOUT_RATE = 0.1  # currently not used
 BATCH_SIZE = 32
@@ -132,6 +132,8 @@ def load_data(example_length):
 
 
 def split_data(X, y, train_frac, valid_frac, test_frac):
+
+	np.random.seed(1)
 
 	assert train_frac + valid_frac + test_frac == 1, "Train/valid/test data fractions do not sum to one"
 
