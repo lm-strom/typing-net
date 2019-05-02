@@ -9,7 +9,7 @@ from keras.layers import Conv1D, MaxPooling1D
 from keras.layers import Input, Concatenate
 from keras.layers import GRU
 
-DATA_PATH = "/Users/Hannes/Downloads/typing-net/data/processed_data2/"
+DATA_PATH = "/home/ubuntu/typing-net/data/processed_data/"
 
 # Constants
 FEATURE_LENGTH = 6
