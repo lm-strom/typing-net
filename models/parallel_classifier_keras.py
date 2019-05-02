@@ -17,39 +17,49 @@ FEATURE_LENGTH = 6
 # Hyperparameters
 EXAMPLE_LENGTH = 18
 
+EPOCHS_SUBMODEL = 60
 EPOCHS = 100
 DROPOUT_RATE = 0.1  # currently not used
 BATCH_SIZE = 32
 LEARNING_RATE = 3e-4
 
 
-def build_model(input_shape, n_classes):
+def build_submodel(input_shape, n_classes):
 	"""
 	Builds classifier model (CNN + RNN)
 	"""
 
-	new_input_shape = (int(input_shape[0]/2), input_shape[1])
+	model = Sequential()
+	model.add(Conv1D(32, 2, activation="sigmoid", input_shape=input_shape))
+	model.add(Conv1D(32, 2, activation="relu"))
+	model.add(Conv1D(32, 2, activation="relu"))
+	model.add(MaxPooling1D())
+	model.add(Flatten())
+	model.add(Dense(n_classes*8, activation="sigmoid"))
+	model.add(Dense(n_classes*4, activation="relu"))
+	model.add(Dense(n_classes, activation="softmax"))
+	# model.add(GRU(units=n_classes, activation="softmax"))
 
-	inp1 = Input(shape=new_input_shape)
-	inp2 = Input(shape=new_input_shape)
+	print(model.summary())
 
-	conv1_1 = Conv1D(32, 2, activation="sigmoid", input_shape=input_shape)(inp1)
-	conv2_1 = Conv1D(32, 2, activation="sigmoid", input_shape=input_shape)(inp2)
-	conv1_2 = Conv1D(32, 2, activation="relu", input_shape=input_shape)(conv1_1)
-	conv2_2 = Conv1D(32, 2, activation="relu", input_shape=input_shape)(conv2_1)
-	maxp1 = MaxPooling1D()(conv1_2)
-	maxp2 = MaxPooling1D()(conv2_2)
-	flatten1 = Flatten()(maxp1)
-	flatten2 = Flatten()(maxp2)
-	dense1_1 = Dense(n_classes*8, activation="sigmoid")(flatten1)
-	dense2_1 = Dense(n_classes*8, activation="sigmoid")(flatten2)
-	dense1_2 = Dense(n_classes*4, activation="relu")(dense1_1)
-	dense2_2 = Dense(n_classes*4, activation="relu")(dense2_1)
-	dense1_3 = Dense(n_classes, activation="softmax")(dense1_2)
-	dense2_3 = Dense(n_classes, activation="softmax")(dense2_2)
+	return model
 
-	mrg = Concatenate()([dense1_3, dense2_3])
-	dense = Dense(n_classes, activation="relu")(mrg)
+def build_model(submodel, weights, input_shape, n_classes):
+	"""
+	Builds classifier model (CNN + RNN)
+	"""
+
+	print(input_shape)
+
+	inp1 = Input(shape=input_shape)
+	inp2 = Input(shape=input_shape)
+
+	subnet1 = submodel(inputs=inp1)
+	subnet2 = submodel(inputs=inp2)
+
+	mrg = Concatenate()([subnet1, subnet2])
+	dense = Dense(n_classes*4, activation="relu")(mrg)
+	dense = Dense(n_classes*4, activation="relu")(dense)
 	op = Dense(n_classes, activation="softmax")(dense)
 
 	model = Model(input=[inp1, inp2], output=op)
@@ -85,7 +95,7 @@ def one_hot_to_index(y):
 	return indices
 
 
-def load_data():
+def load_data(example_length):
 	"""
 	Loads all data. Creates examples of length EXAMPLE_LENGTH.
 	Returns:
@@ -108,7 +118,7 @@ def load_data():
 				feature = tuple(map(int, line.split()))
 				example.append(feature)
 
-				if len(example) == EXAMPLE_LENGTH:
+				if len(example) == example_length:
 					X.append(example)
 					y.append(i)
 					example = []
@@ -162,25 +172,44 @@ def next_batch(X, y):
 def main():
 
 	# Load all data
-	X, y = load_data()
+	X, y = load_data(EXAMPLE_LENGTH)
 
 	# Split that shit
 	X_train, y_train, X_valid, y_valid, X_test, y_test = split_data(X, y, train_frac=0.8, valid_frac=0.1, test_frac=0.1)
 
-	X_train1 = X_train[:,:int(int(EXAMPLE_LENGTH/2)),:]
-	X_train2 = X_train[:,int(int(EXAMPLE_LENGTH/2)):,:]
-
-	X_valid1 = X_valid[:,:int(int(EXAMPLE_LENGTH/2)),:]
-	X_valid2 = X_valid[:,int(EXAMPLE_LENGTH/2):,:]
-
-	X_test1 = X_test[:,:int(EXAMPLE_LENGTH/2),:]
-	X_test2 = X_test[:,int(EXAMPLE_LENGTH/2):,:]
-
-
 	# Build model
 	input_shape = X_train.shape[1:]
 	n_classes = y_train.shape[1]
-	model = build_model(input_shape, n_classes)
+	submodel = build_submodel(input_shape, n_classes)
+
+	# Train model
+	adam_optimizer = optimizers.Adam(lr=LEARNING_RATE)
+	submodel.compile(loss="categorical_crossentropy", optimizer=adam_optimizer, metrics=["accuracy"])
+	submodel.fit(X_train, y_train, validation_data=(X_valid, y_valid), batch_size=BATCH_SIZE, epochs=EPOCHS_SUBMODEL)
+
+	weights = submodel.get_weights()
+
+	#------------------------
+	
+	# Load all data
+	X, y = load_data(EXAMPLE_LENGTH*2)
+
+	# Split that shit
+	X_train, y_train, X_valid, y_valid, X_test, y_test = split_data(X, y, train_frac=0.8, valid_frac=0.1, test_frac=0.1)
+
+	X_train1 = X_train[:,:EXAMPLE_LENGTH,:]
+	X_train2 = X_train[:,EXAMPLE_LENGTH:,:]
+
+	X_valid1 = X_valid[:,:EXAMPLE_LENGTH,:]
+	X_valid2 = X_valid[:,EXAMPLE_LENGTH:,:]
+
+	X_test1 = X_test[:,:EXAMPLE_LENGTH,:]
+	X_test2 = X_test[:,EXAMPLE_LENGTH:,:]
+
+	# Build model
+	model = build_model(submodel, weights, input_shape, n_classes)
+
+	model.layers[2].trainable = False
 
 	# Train model
 	adam_optimizer = optimizers.Adam(lr=LEARNING_RATE)
