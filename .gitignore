@@ -1,5 +1,5 @@
 *.DS_Store
 data
+preprocessed_data
 virtual_enviroment
 AWS
-
