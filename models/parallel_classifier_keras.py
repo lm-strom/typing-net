@@ -1,11 +1,4 @@
-<<<<<<< HEAD
-import os
-import sys
-import numpy as np
-from tqdm import tqdm
-=======
 import argparse
->>>>>>> master
 
 from keras import optimizers
 from keras.models import Sequential, Model
@@ -13,11 +6,8 @@ from keras.layers import Dense, Flatten, Dropout
 from keras.layers import Conv1D
 from keras.layers import Input, Concatenate
 
-<<<<<<< HEAD
-=======
 import util
 
->>>>>>> master
 # Constants
 FEATURE_LENGTH = 6
 
@@ -61,54 +51,10 @@ def build_submodel(input_shape, n_classes):
 
     return model
 
-
-<<<<<<< HEAD
-	if len(sys.argv) < 2:
-		print("Missing required arguments: input_path")
-		exit()
-
-	inputDataPath = sys.argv[1]
-	if inputDataPath[-1] != "/":
-		inputDataPath = inputDataPath + "/"
-
-	n_users = len(os.listdir(inputDataPath))
-
-	print("Loading data...")
-	for i, user_file_name in tqdm(enumerate(os.listdir(inputDataPath))):
-		if user_file_name[0] == ".":
-			continue
-		with open(inputDataPath + user_file_name, "r") as user_file:
-			example = []
-			for line in user_file:
-				feature = tuple(map(int, line.split()))
-				example.append(feature)
-
-				if len(example) == example_length:
-					X.append(example)
-					y.append(i)
-					example = []
-
-	X = np.asarray(X)
-	y = np.asarray(y)
-
-	y = index_to_one_hot(y, n_users)
-
-	return X, y
-
-
-def split_data(X, y, train_frac, valid_frac, test_frac):
-
-	np.random.seed(1)
-
-	assert train_frac + valid_frac + test_frac == 1, "Train/valid/test data fractions do not sum to one"
-
-	n_examples = X.shape[0]
-=======
 def build_model(submodel, weights, input_shape, n_classes):
     """
     Builds classifier model (CNN + RNN)
     """
->>>>>>> master
 
     print(input_shape)
 
