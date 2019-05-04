@@ -1,6 +1,22 @@
 import os
+import random
+
 import numpy as np
 from tqdm import tqdm
+
+
+def shuffle_data(X, y):
+    """
+    Shuffles the data in X, y with the same permutation.
+    """
+
+    n_examples = X.shape[0]
+
+    perm = np.random.permutation(n_examples)
+    X = X[perm, :, :]
+    y = y[perm, :]
+
+    return X, y
 
 
 def split_data(X, y, train_frac, valid_frac, test_frac):
@@ -15,9 +31,7 @@ def split_data(X, y, train_frac, valid_frac, test_frac):
     n_examples = X.shape[0]
 
     # Shuffle
-    perm = np.random.permutation(n_examples)
-    X = X[perm, :, :]
-    y = y[perm, :]
+    X, y = shuffle_data(X, y)
 
     # Split
     ind_1 = int(np.round(train_frac*n_examples))
@@ -71,6 +85,51 @@ def load_data(data_path, example_length):
     y = index_to_one_hot(y, n_users)
 
     return X, y
+
+
+def split_on_users(X, y, n_valid_users, n_invalid_users):
+    """
+    Splits the given dataset into three sets:
+    X_valid, y_valid - Data from the set of n_valid_users that are authorized.
+    X_invalid, y_invalid - Data from a set of n_invalid_users that are known to be unauthorized.
+    X_unknown, y_unknown - Data from users that are unauthorized, but never gets seen during training.
+
+    Data is relabeled as one-hot for n_known_users + 1
+    """
+    n_examples, n_users = y.shape
+
+    assert n_valid_users + n_invalid_users <= n_users, "Number of valid/invalid users specified exceeds the total number of users."
+
+    valid_users = random.sample(range(n_users), k=n_valid_users)
+    remaining_users = [user for user in range(n_users) if user not in valid_users]
+
+    invalid_users = random.sample(remaining_users, k=n_invalid_users)
+
+    X_valid, y_valid = [], []
+    X_invalid, y_invalid = [], []
+    X_unknown, y_unknown = [], []
+
+    for i in range(n_examples):
+        user = np.asscalar(np.where(y[i, :] == 1)[0])
+        if user in valid_users:
+            X_valid.append(X[i, :])
+            y_valid.append(valid_users.index(user))
+        elif user in invalid_users:
+            X_invalid.append(X[i, :])
+            y_invalid.append(n_valid_users)
+        else:
+            X_unknown.append(X[i, :])
+            y_unknown.append(n_valid_users)
+
+    X_valid, y_valid = np.asarray(X_valid), np.asarray(y_valid)
+    X_invalid, y_invalid = np.asarray(X_invalid), np.asarray(y_invalid)
+    X_unknown, y_unknown = np.asarray(X_unknown), np.asarray(y_unknown)
+
+    y_valid = index_to_one_hot(y_valid, n_valid_users + 1)
+    y_invalid = index_to_one_hot(y_invalid, n_valid_users + 1)
+    y_unknown = index_to_one_hot(y_unknown, n_valid_users + 1)
+
+    return X_valid, y_valid, X_invalid, y_invalid, X_unknown, y_unknown
 
 
 def index_to_one_hot(y, n_classes):
