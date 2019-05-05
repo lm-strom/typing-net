@@ -84,6 +84,51 @@ def load_data(data_path, example_length):
 
     y = index_to_one_hot(y, n_users)
 
+    X, y = generate_examples_from_adjacents(X, y, example_length, step=example_length//2)
+
+    return X, y
+
+
+def generate_examples_from_adjacents(X, y, example_length, step=1):
+    """
+    Parses through the data and generates (example_length - 1)//step
+    additional examples from every pair of adjacent examples with the same label.
+    The default step=1 generates *all* possible additional examples.
+
+    The generated examples are appended to the original data, and the full dataset is returned.
+    """
+
+    assert step <= example_length - 1, "Invalid step size. Must have step <= example_length - 1"
+
+    n_examples = X.shape[0]
+
+    X_additional = np.empty((0,) + X.shape[1:])
+    y_additional = np.empty((0, y.shape[1]))
+
+    print("Generating additional examples...")
+    for i in tqdm(range(n_examples - 1)):
+
+        # If not the same label: continue
+        if np.any(y[i, :] != y[i + 1, :]):
+            continue
+
+        concat = np.vstack((X[i, :, :], X[i + 1, :, :]))
+
+        for start in range(1, example_length, step):
+            end = start + example_length
+
+            new_example = np.expand_dims(concat[start:end, :], axis=0)
+            new_label = np.expand_dims(y[i, :], axis=0)
+
+            X_additional = np.append(X_additional, new_example, axis=0)
+            y_additional = np.append(y_additional, new_label, axis=0)
+
+    print(X_additional.shape)
+    print(X.shape)
+
+    X = np.vstack((X, X_additional))
+    y = np.vstack((y, y_additional))
+
     return X, y
 
 
@@ -172,6 +217,9 @@ def index_to_one_hot(y, n_classes):
 
     If a label is -1 (unknown), its one-hot enoding becomes [-1, ..., -1]
     """
+
+    if y.size == 0:
+        return y
 
     minus_one = np.where(y == -1)
     y = y.reshape(-1)

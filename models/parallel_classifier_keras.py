@@ -7,6 +7,7 @@ from keras.models import Sequential, Model
 from keras.layers import Dense, Flatten, Dropout
 from keras.layers import Conv1D
 from keras.layers import Input, Concatenate
+from keras.layers import LeakyReLU
 
 import util
 
@@ -16,7 +17,7 @@ FEATURE_LENGTH = 6
 # Hyperparameters
 EXAMPLE_LENGTH = 18
 
-EPOCHS_SUBMODEL = 80
+EPOCHS_SUBMODEL = 100
 EPOCHS = 100
 DROPOUT_RATE = 0.1
 BATCH_SIZE = 32
@@ -31,7 +32,7 @@ def build_submodel(input_shape, n_classes):
     model = Sequential()
 
     # Convolutional layers
-    model.add(Conv1D(128, 2, activation="sigmoid", input_shape=input_shape))
+    model.add(Conv1D(128, 2, activation="relu", input_shape=input_shape))
     model.add(Dropout(DROPOUT_RATE))
     model.add(Conv1D(128, 2, activation="relu"))
     model.add(Dropout(DROPOUT_RATE))
@@ -59,8 +60,6 @@ def build_model(submodel, weights, input_shape, n_classes):
     Builds classifier model (CNN + RNN)
     """
 
-    print(input_shape)
-
     inp1 = Input(shape=input_shape)
     inp2 = Input(shape=input_shape)
 
@@ -79,12 +78,14 @@ def build_model(submodel, weights, input_shape, n_classes):
     return model
 
 
-def compute_FAR_FRR(trained_model, X_test_1, X_test_2, y_test):
+def compute_FAR_FRR(trained_model, X_test, y_test):
     """
     Computes the FAR and FRR of trained_model on the given test set.
+
+    Assumes label is [-1, ..., -1] is user is unknown (i.e. unauthorized)
     """
 
-    n_examples = X_test_1.shape[0]
+    n_examples = X_test.shape[0]
     n_valid_users = y_test.shape[1]
 
     n_imposter_tries = 0
@@ -94,12 +95,8 @@ def compute_FAR_FRR(trained_model, X_test_1, X_test_2, y_test):
 
     # Let every person claim to be every user
     for i in tqdm(range(n_examples)):
-        input_1 = X_test_1[i, :, :]
-        input_1 = input_1.reshape((1,) + input_1.shape)
-        input_2 = X_test_2[i, :, :]
-        input_2 = input_2.reshape((1,) + input_2.shape)
 
-        y_pred = trained_model.predict([input_1, input_2])
+        y_pred = trained_model.predict(X_test[i, :, :].reshape((1,) + X_test[i, :, :].shape))
         y_true = y_test[i, :]
 
         for id in range(n_valid_users):
@@ -113,7 +110,7 @@ def compute_FAR_FRR(trained_model, X_test_1, X_test_2, y_test):
             # If imposter
             else:
                 n_imposter_tries += 1
-                if np.argmax(y_pred) != n_valid_users:
+                if np.argmax(y_pred) == id:
                     FA_errors += 1
 
     FAR = float(FA_errors)/n_imposter_tries
@@ -125,8 +122,8 @@ def compute_FAR_FRR(trained_model, X_test_1, X_test_2, y_test):
 def main():
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("-d", "--data_path", metavar="PATH", default=None, help="Path to read processed digraph data from.")
-    parser.add_argument("-n", "--n_users", metavar="N_USERS", default=20, help="Number of users to enroll.", type=int)
+    parser.add_argument("-d", "--data_path", metavar="PATH", required=True, help="Path to read processed digraph data from.")
+    parser.add_argument("-n", "--n_users", metavar="N_USERS", required=True, help="Number of users to enroll.", type=int)
     args = parser.parse_args()
 
     # Load all data
@@ -162,6 +159,17 @@ def main():
     adam_optimizer = optimizers.Adam(lr=LEARNING_RATE)
     submodel.compile(loss="categorical_crossentropy", optimizer=adam_optimizer, metrics=["accuracy"])
     submodel.fit(X_train, y_train, validation_data=(X_valid, y_valid), batch_size=BATCH_SIZE, epochs=EPOCHS_SUBMODEL)
+
+    # Test model
+    print("Evaluating model...")
+    loss, accuracy = submodel.evaluate(X_test_v, y_test_v, verbose=1)
+    FAR, FRR = compute_FAR_FRR(submodel, X_test, y_test)
+
+    print("\n---- Test Results ----")
+    print("Test loss = {}, Test accuracy = {}".format(loss, accuracy))
+    print("FAR = {}, FRR = {}".format(FAR, FRR))
+
+    """
 
     weights = submodel.get_weights()
 
@@ -217,6 +225,8 @@ def main():
     print("\n---- Test Results ----")
     print("Test loss = {}, Test accuracy = {}".format(loss, accuracy))
     print("FAR = {}, FRR = {}".format(FAR, FRR))
+
+    """
 
 
 if __name__ == "__main__":
