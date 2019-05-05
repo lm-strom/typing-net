@@ -87,58 +87,96 @@ def load_data(data_path, example_length):
     return X, y
 
 
-def split_on_users(X, y, n_valid_users, n_invalid_users):
+def split_on_users(X, y, n_valid_users, add_other=False, n_invalid_users=None):
     """
+    If add_other is False (default):
+
+    Splits the given dataset into two sets:
+    X_valid, y_valid - Data from the set of n_valid_users that are authorized.
+    X_unknown, y_unknown - Data from the remaining set of users
+
+    Data is relabeled as one-hot for n_valid_users
+
+    -----------------------------------------------------------------------------------
+
+    If add_other is True (used to split data for "valid-plus-others" approach):
+
+    n_invalid_users must be specified.
+
     Splits the given dataset into three sets:
     X_valid, y_valid - Data from the set of n_valid_users that are authorized.
     X_invalid, y_invalid - Data from a set of n_invalid_users that are known to be unauthorized.
     X_unknown, y_unknown - Data from users that are unauthorized, but never gets seen during training.
 
-    Data is relabeled as one-hot for n_known_users + 1
+    Data is relabeled as one-hot for n_valid_users + 1
     """
+
     n_examples, n_users = y.shape
 
-    assert n_valid_users + n_invalid_users <= n_users, "Number of valid/invalid users specified exceeds the total number of users."
+    if add_other:
+        assert n_invalid_users is not None, "Argument n_invalid_users must be specified when add_other is True."
+        assert n_valid_users + n_invalid_users <= n_users, "Number of valid/invalid users specified exceeds the total number of users."
+    else:
+        assert n_valid_users <= n_users, "Number of valid users specified exceeds the total number of users."
 
     valid_users = random.sample(range(n_users), k=n_valid_users)
-    remaining_users = [user for user in range(n_users) if user not in valid_users]
 
-    invalid_users = random.sample(remaining_users, k=n_invalid_users)
+    if add_other:
+        remaining_users = [user for user in range(n_users) if user not in valid_users]
+        invalid_users = random.sample(remaining_users, k=n_invalid_users)
 
     X_valid, y_valid = [], []
-    X_invalid, y_invalid = [], []
     X_unknown, y_unknown = [], []
+    if add_other:
+        X_invalid, y_invalid = [], []
 
     for i in range(n_examples):
         user = np.asscalar(np.where(y[i, :] == 1)[0])
         if user in valid_users:
             X_valid.append(X[i, :])
             y_valid.append(valid_users.index(user))
-        elif user in invalid_users:
-            X_invalid.append(X[i, :])
-            y_invalid.append(n_valid_users)
+        elif add_other:
+            if user in invalid_users:
+                X_invalid.append(X[i, :])
+                y_invalid.append(n_valid_users)
+            else:
+                X_unknown.append(X[i, :])
+                y_unknown.append(n_valid_users)
         else:
             X_unknown.append(X[i, :])
-            y_unknown.append(n_valid_users)
+            y_unknown.append(-1)
 
     X_valid, y_valid = np.asarray(X_valid), np.asarray(y_valid)
-    X_invalid, y_invalid = np.asarray(X_invalid), np.asarray(y_invalid)
     X_unknown, y_unknown = np.asarray(X_unknown), np.asarray(y_unknown)
+    if add_other:
+        X_invalid, y_invalid = np.asarray(X_invalid), np.asarray(y_invalid)
 
-    y_valid = index_to_one_hot(y_valid, n_valid_users + 1)
-    y_invalid = index_to_one_hot(y_invalid, n_valid_users + 1)
-    y_unknown = index_to_one_hot(y_unknown, n_valid_users + 1)
+    if add_other:
+        y_valid = index_to_one_hot(y_valid, n_valid_users + 1)
+        y_unknown = index_to_one_hot(y_unknown, n_valid_users + 1)
+        y_invalid = index_to_one_hot(y_invalid, n_valid_users + 1)
+    else:
+        y_valid = index_to_one_hot(y_valid, n_valid_users)
+        y_unknown = index_to_one_hot(y_unknown, n_valid_users)
 
-    return X_valid, y_valid, X_invalid, y_invalid, X_unknown, y_unknown
+    if add_other:
+        return X_valid, y_valid, X_invalid, y_invalid, X_unknown, y_unknown
+
+    return X_valid, y_valid, X_unknown, y_unknown
 
 
 def index_to_one_hot(y, n_classes):
     """
     Converts a list of indices to one-hot encoding.
     Example: y = [1, 0, 3] => np.array([[0, 1, 0, 0], [1, 0, 0, 0], [0, 0, 0, 1]])
+
+    If a label is -1 (unknown), its one-hot enoding becomes [-1, ..., -1]
     """
+
+    minus_one = np.where(y == -1)
     y = y.reshape(-1)
     one_hot = np.eye(n_classes)[y]
+    one_hot[minus_one, :] = -np.ones((n_classes,))
 
     return one_hot
 

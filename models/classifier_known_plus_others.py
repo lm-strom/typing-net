@@ -1,6 +1,8 @@
 import argparse
 import numpy as np
 
+from tqdm import tqdm
+
 from keras import optimizers
 from keras.models import Sequential, Model
 from keras.layers import Dense, Flatten, Dropout
@@ -17,8 +19,8 @@ N_INVALID_USERS = 20  # number of unauthorized users considered in training
 # Hyperparameters
 EXAMPLE_LENGTH = 18
 
-EPOCHS_SUBMODEL = 40
-EPOCHS = 100
+EPOCHS_SUBMODEL = 80
+EPOCHS = 40
 DROPOUT_RATE = 0.1
 BATCH_SIZE = 32
 LEARNING_RATE = 3e-4
@@ -60,8 +62,6 @@ def build_model(submodel, weights, input_shape, n_classes):
     Builds classifier model (CNN + RNN)
     """
 
-    print(input_shape)
-
     inp1 = Input(shape=input_shape)
     inp2 = Input(shape=input_shape)
 
@@ -73,11 +73,55 @@ def build_model(submodel, weights, input_shape, n_classes):
     dense = Dense(n_classes*4, activation="relu")(dense)
     op = Dense(n_classes, activation="softmax")(dense)
 
-    model = Model(input=[inp1, inp2], output=op)
+    model = Model(inputs=[inp1, inp2], outputs=op)
 
     print(model.summary())
 
     return model
+
+
+def compute_FAR_FRR(trained_model, X_test_1, X_test_2, y_test):
+    """
+    Computes the FAR and FRR of trained_model on the given test set.
+    Assumes (valid users + 1) classes.
+    """
+
+    n_examples = X_test_1.shape[0]
+    n_valid_users = y_test.shape[1] - 1
+
+    n_imposter_tries = 0
+    n_valid_tries = 0
+    FA_errors = 0
+    FR_errors = 0
+
+    # Let every person claim to be every user
+    for i in tqdm(range(n_examples)):
+        input_1 = X_test_1[i, :, :]
+        input_1 = input_1.reshape((1,) + input_1.shape)
+        input_2 = X_test_2[i, :, :]
+        input_2 = input_2.reshape((1,) + input_2.shape)
+
+        y_pred = trained_model.predict([input_1, input_2])
+        y_true = y_test[i, :]
+
+        for id in range(n_valid_users):
+
+            # If valid user
+            if np.argmax(y_true) == id:
+                n_valid_tries += 1
+                if np.argmax(y_pred) != id:
+                    FR_errors += 1
+
+            # If imposter
+            else:
+                n_imposter_tries += 1
+                if np.argmax(y_pred) != n_valid_users:
+                    FA_errors += 1
+
+    FAR = float(FA_errors)/n_imposter_tries
+    FRR = float(FR_errors)/n_valid_tries
+
+    return FAR, FRR
 
 
 def main():
@@ -90,12 +134,12 @@ def main():
     X, y = util.load_data(args.data_path, EXAMPLE_LENGTH)
 
     # Split into random set of valid (v), invalid (i) and unknown (u) users (and relabel accordingly)
-    X_v, y_v, X_i, y_i, X_u, y_u = util.split_on_users(X, y, n_valid_users=N_VALID_USERS, n_invalid_users=N_INVALID_USERS)
+    X_v, y_v, X_i, y_i, X_u, y_u = util.split_on_users(X, y, n_valid_users=N_VALID_USERS, add_other=True, n_invalid_users=N_INVALID_USERS)
 
     # Split into train/valid/test
     X_train_v, y_train_v, X_valid_v, y_valid_v, X_test_v, y_test_v = util.split_data(X_v, y_v, train_frac=0.6, valid_frac=0.2, test_frac=0.2)
     X_train_i, y_train_i, X_valid_i, y_valid_i, X_test_i, y_test_i = util.split_data(X_i, y_i, train_frac=0.8, valid_frac=0.1, test_frac=0.1)
-    _, _, _, _, X_test_u, y_test_u = util.split_data(X_u, y_u, train_frac=0, valid_frac=0, test_frac=1)
+    X_test_u, y_test_u = X_u, y_u
 
     # Concatenate and shuffle the two data sets
     X_train = np.vstack((X_train_v, X_train_i))
@@ -125,8 +169,7 @@ def main():
 
     weights = submodel.get_weights()
 
-
-    # ------------------------
+    # Outer model
 
     # Reshape to double example_length
     X_shape = X_train_non_shuffled.shape
@@ -150,6 +193,7 @@ def main():
     X_test = X_test_non_shuffled.reshape(X_shape[0]//2, 2*X_shape[1], X_shape[2])
     y_test = y_test_non_shuffled[::2]
 
+    # Split into sub-inputs
     X_train1 = X_train[:, :EXAMPLE_LENGTH, :]
     X_train2 = X_train[:, EXAMPLE_LENGTH:, :]
 
@@ -170,10 +214,13 @@ def main():
     model.fit([X_train1, X_train2], y_train, validation_data=([X_valid1, X_valid2], y_valid), batch_size=BATCH_SIZE, epochs=EPOCHS)
 
     # Test model
+    print("Evaluating model...")
     loss, accuracy = model.evaluate([X_test1, X_test2], y_test, verbose=1)
+    FAR, FRR = compute_FAR_FRR(model, X_test1, X_test2, y_test)
 
     print("\n---- Test Results ----")
     print("Test loss = {}, Test accuracy = {}".format(loss, accuracy))
+    print("FAR = {}, FRR = {}".format(FAR, FRR))
 
 
 if __name__ == "__main__":
