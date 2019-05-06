@@ -5,3 +5,4 @@ virtual_enviroment
 AWS
 __pycache__
 ._*.py
+*.npy
