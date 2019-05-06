@@ -61,7 +61,7 @@ def generate_examples_from_adjacents(X, y, example_length, step_size=1):
     X_additional = np.empty((0,) + X.shape[1:])
     y_additional = np.empty((0, y.shape[1]))
 
-    print("Augmenting to generate {} additional examples...".format(n_examples*(example_length - 1)//step_size))
+    print("Augmenting to generate additional examples...")
     for i in tqdm(range(n_examples - 1)):
 
         # If not the same label: continue
@@ -99,7 +99,7 @@ def main():
                         help="Step size to use when generating additional examples. A step size s will yield (example_length - 1)//s additional examples per original example.")
     args = parser.parse_args()
 
-    # Check that inputs are valid
+    # Check that input args are valid
     assert args.train_frac + args.valid_frac + args.test_frac == 1, "Specified train/valid/train fractions do not sum to 1."
 
     if args.step_size is None:
@@ -120,20 +120,23 @@ def main():
     # Create the regular examples
     X, y, n_users = create_examples(args.input_path, args.example_length)
 
-    # Split into random set of valid (v) and unknown (u) users (and relabel accordingly)
+    # Split into set of valid (v) and unknown (u) users (and relabel accordingly)
     assert args.n_valid_users < n_users, "Number of valid users must be smaller than the total number of users in the input data."
-    X_v, y_v, X_u, y_u = util.split_on_users(X, y, n_valid_users=args.n_valid_users)
+    X_v, y_v, X_u, y_u = util.split_on_users(X, y, n_valid_users=args.n_valid_users, pick_random=False)
 
     # Split the data into train/valid/test
-    X_train, y_train, X_valid, y_valid, X_test_v, y_test_v = util.split_data(X_v, y_v, train_frac=args.train_frac, valid_frac=args.valid_frac, test_frac=args.test_frac)
+    X_train, y_train, X_valid, y_valid, X_test_v, y_test_v = util.split_per_user(X_v, y_v, train_frac=args.train_frac, valid_frac=args.valid_frac,
+                                                                                 test_frac=args.test_frac, shuffle=False)
     X_test_u, y_test_u = X_u, y_u
 
-    # Concatenate test data
+    # Concatenate test data from valid/unknown users
     X_test = np.vstack((X_test_v, X_test_u))
     y_test = np.vstack((y_test_v, y_test_u))
 
-    # Generate additional examples for the training set
+    # Generate additional examples for each set
     X_train, y_train = generate_examples_from_adjacents(X_train, y_train, args.example_length, args.step_size)
+    X_valid, y_valid = generate_examples_from_adjacents(X_valid, y_valid, args.example_length, args.step_size)
+    X_test, y_test = generate_examples_from_adjacents(X_test, y_test, args.example_length, args.step_size)
 
     # Save the data in output_path
     np.save(args.output_path + "X_train.npy", X_train)

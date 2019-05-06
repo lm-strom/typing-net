@@ -1,13 +1,11 @@
-import os
 import random
 
 import numpy as np
-from tqdm import tqdm
 
 
 def shuffle_data(X, y):
     """
-    Shuffles the data in X, y with the same permutation.
+    Shuffles the data in X, y with the same random permutation.
     """
 
     n_examples = X.shape[0]
@@ -19,9 +17,10 @@ def shuffle_data(X, y):
     return X, y
 
 
-def split_data(X, y, train_frac, valid_frac, test_frac):
+def split_data(X, y, train_frac, valid_frac, test_frac, shuffle=True):
     """
     Splits data into train/valid/test-sets according to the specified fractions.
+    If shuffle is True, data is shuffled before splitting.
     """
 
     np.random.seed(1)
@@ -31,7 +30,8 @@ def split_data(X, y, train_frac, valid_frac, test_frac):
     n_examples = X.shape[0]
 
     # Shuffle
-    X, y = shuffle_data(X, y)
+    if shuffle:
+        X, y = shuffle_data(X, y)
 
     # Split
     ind_1 = int(np.round(train_frac*n_examples))
@@ -47,6 +47,43 @@ def split_data(X, y, train_frac, valid_frac, test_frac):
     assert X_train.shape[0] + X_valid.shape[0] + X_test.shape[0] == n_examples, "Data split failed"
 
     return (X_train, y_train, X_valid, y_valid, X_test, y_test)
+
+
+def split_per_user(X, y, train_frac, valid_frac, test_frac, shuffle=False):
+    """
+    Splits the data into train/valid/test while still ensuring that each
+    set has class balance. Does NOT shuffle the data before splitting by default.
+    """
+
+    np.random.seed(1)
+
+    assert train_frac + valid_frac + test_frac == 1, "Train/valid/test data fractions do not sum to one"
+
+    # Shuffle
+    if shuffle:
+        X, y = shuffle_data(X, y)
+
+    n_users = y.shape[1]
+
+    X_train = np.empty((0,) + X.shape[1:])
+    y_train = np.empty((0,) + y.shape[1:])
+    X_valid = np.empty((0,) + X.shape[1:])
+    y_valid = np.empty((0,) + y.shape[1:])
+    X_test = np.empty((0,) + X.shape[1:])
+    y_test = np.empty((0,) + y.shape[1:])
+
+    for user in range(n_users):
+        user_inds = np.where(y[:, user] == 1)[0]
+        X_train_sub, y_train_sub, X_valid_sub, y_valid_sub, X_test_sub, y_test_sub = split_data(X[user_inds, :, :], y[user_inds, :],
+                                                                                                train_frac, valid_frac, test_frac, shuffle=False)
+        X_train = np.vstack((X_train, X_train_sub)) if X_train.size else X_train_sub
+        y_train = np.vstack((y_train, y_train_sub)) if y_train.size else y_train_sub
+        X_valid = np.vstack((X_valid, X_valid_sub)) if X_valid.size else X_valid_sub
+        y_valid = np.vstack((y_valid, y_valid_sub)) if y_valid.size else y_valid_sub
+        X_test = np.vstack((X_test, X_test_sub)) if X_test.size else X_test_sub
+        y_test = np.vstack((y_test, y_test_sub)) if y_test.size else y_test_sub
+
+    return X_train, y_train, X_valid, y_valid, X_test, y_test
 
 
 def load_examples(data_path):
@@ -72,7 +109,7 @@ def load_examples(data_path):
     return X_train, y_train, X_valid, y_valid, X_test, y_test
 
 
-def split_on_users(X, y, n_valid_users, add_other=False, n_invalid_users=None):
+def split_on_users(X, y, n_valid_users, pick_random=False, add_other=False, n_invalid_users=None):
     """
     If add_other is False (default):
 
@@ -82,7 +119,7 @@ def split_on_users(X, y, n_valid_users, add_other=False, n_invalid_users=None):
 
     Data is relabeled as one-hot for valid users, and [-1, ..., -1] for unknown users.
 
-    -----------------------------------------------------------------------------------
+    -------------------------------------------------------------------------------------------------
 
     If add_other is True (used to split data for "valid-plus-others" approach):
 
@@ -96,6 +133,12 @@ def split_on_users(X, y, n_valid_users, add_other=False, n_invalid_users=None):
     Data is relabeled as one-hot with dimension (n_valid_users + 1) for valid and invalid users
     where last index represents "others". Data is relabeled with [-1, ..., -1] for unknown users.
 
+    --------------------------------------------------------------------------------------------------
+
+    Other options:
+
+    - If pick_random is true, sets of users are selected randomly. Otherwise first users are selected.
+
     """
 
     n_examples, n_users = y.shape
@@ -106,11 +149,17 @@ def split_on_users(X, y, n_valid_users, add_other=False, n_invalid_users=None):
     else:
         assert n_valid_users <= n_users, "Number of valid users specified exceeds the total number of users."
 
-    valid_users = random.sample(range(n_users), k=n_valid_users)
+    if pick_random:
+        valid_users = random.sample(range(n_users), k=n_valid_users)
+    else:
+        valid_users = range(n_valid_users)
 
     if add_other:
         remaining_users = [user for user in range(n_users) if user not in valid_users]
-        invalid_users = random.sample(remaining_users, k=n_invalid_users)
+        if pick_random:
+            invalid_users = random.sample(remaining_users, k=n_invalid_users)
+        else:
+            invalid_users = range(n_valid_users, n_valid_users + n_invalid_users)
 
     X_valid, y_valid = [], []
     X_unknown, y_unknown = [], []
