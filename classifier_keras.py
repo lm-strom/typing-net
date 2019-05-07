@@ -8,13 +8,15 @@ from tqdm import tqdm
 from keras import optimizers
 from keras.models import Sequential
 from keras.layers import Dense, Flatten, Dropout
-from keras.layers import Conv1D, MaxPooling1D
+from keras.layers import Conv1D
 from keras.callbacks import Callback, ModelCheckpoint
+
+from sklearn.metrics import confusion_matrix
 
 import util
 
 # Hyperparameters
-EPOCHS = 100
+EPOCHS = 10
 DROPOUT_RATE = 0.1
 BATCH_SIZE = 32
 LEARNING_RATE = 3e-4
@@ -79,6 +81,25 @@ def build_model(input_shape, n_classes):
     return model
 
 
+def setup_callbacks(save_path, n_classes):
+    """
+    Sets up callbacks for early stopping and model saving.
+    """
+
+    signal.signal(signal.SIGINT, handler)
+
+    callback_list = []
+
+    callback_list.append(TerminateOnFlag())  # Terminate training if CTRL+C
+
+    if save_path is not None:
+        model_checkpoint = ModelCheckpoint(save_path + str(n_classes) + "_class_model_{epoch:02d}_{val_loss:.2f}.hdf5",
+                                           monitor="val_loss", save_best_only=True, verbose=1, period=5)  # Save model every 5 epochs
+        callback_list.append(model_checkpoint)
+
+    return callback_list
+
+
 def compute_FAR_FRR(trained_model, X_test, y_test):
     """
     Computes the FAR and FRR of trained_model on the given test set.
@@ -94,11 +115,13 @@ def compute_FAR_FRR(trained_model, X_test, y_test):
     FA_errors = 0
     FR_errors = 0
 
+    y_pred_all = trained_model.predict(X_test)
+
     # Let every person claim to be every user
     for i in tqdm(range(n_examples)):
 
-        y_pred = trained_model.predict(X_test[i, :, :].reshape((1,) + X_test[i, :, :].shape))
         y_true = y_test[i, :]
+        y_pred = y_pred_all[i, :]
 
         for id in range(n_valid_users):
 
@@ -124,23 +147,32 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument(dest="data_path", metavar="DATA_PATH", help="Path to read examples from.")
-    parser.add_argument(dest="model_path", metavar="MODEL_PATH", help="Path to save trained model to.")
+    parser.add_argument("-s", "--save_path", metavar="SAVE_PATH", default=None, help="Path to save trained model to. If no path is specified checkpoints are not saved.")
+    parser.add_argument("-m", "--metrics-path", metavar="METRICS_PATH", default=None, help="Path to save additional performance metrics to (for debugging purposes).")
     args = parser.parse_args()
 
-    if not os.path.isdir(args.model_path):
-        response = input("Model path does not exist. Create it? (Y/n) >> ")
-        if response.lower() not in ["y", "yes", "1", ""]:
-            exit()
-        else:
-            os.makedirs(args.model_path)
+    if args.save_path is not None:
+        if not os.path.isdir(args.save_path):
+            response = input("Save path does not exist. Create it? (Y/n) >> ")
+            if response.lower() not in ["y", "yes", "1", ""]:
+                exit()
+            else:
+                os.makedirs(args.save_path)
+
+    if args.matrics_path is not None:
+        if not os.path.isdir(args.metrics_path):
+            response = input("Metrics path does not exist. Create it? (Y/n) >> ")
+            if response.lower() not in ["y", "yes", "1", ""]:
+                exit()
+            else:
+                os.makedirs(args.metrics_path)
 
     # Load all data
-    X_train, y_train, X_valid, y_valid, X_test, y_test = util.load_examples(args.data_path)
+    X_train, y_train, X_valid, y_valid, X_test_v, y_test_v, X_test_u, y_test_u = util.load_examples(args.data_path)
 
     # Shuffle the data
     X_train, y_train = util.shuffle_data(X_train, y_train)
     X_valid, y_valid = util.shuffle_data(X_valid, y_valid)
-    X_test, y_test = util.shuffle_data(X_test, y_test)
 
     # Build model
     input_shape = X_train.shape[1:]
@@ -151,23 +183,36 @@ def main():
     adam_optimizer = optimizers.Adam(lr=LEARNING_RATE)
     model.compile(loss="categorical_crossentropy", optimizer=adam_optimizer, metrics=["accuracy"])
 
+    # Setup callbacks for early stopping and model saving
+    callback_list = setup_callbacks(args.save_path, n_classes)
+
     # Train model
-    signal.signal(signal.SIGINT, handler)
-    terminate_on_flag = TerminateOnFlag()  # Terminate training if CTRL+C
-    model_checkpoint = ModelCheckpoint(args.model_path + str(n_classes) + "_class_model_{epoch:02d}_{val_loss:.2f}.hdf5",
-                                       monitor="val_loss", save_best_only=True, verbose=1, period=5)  # Save model every 5 epochs
-
     model.fit(X_train, y_train, validation_data=(X_valid, y_valid), batch_size=BATCH_SIZE,
-              epochs=EPOCHS, callbacks=[terminate_on_flag, model_checkpoint])
-
+              epochs=EPOCHS, callbacks=callback_list)
     global training_complete
     training_complete = True
 
     # Test model
     print("Evaluating model...")
+    loss, accuracy = model.evaluate(X_test_v, y_test_v, verbose=1)
+
+    X_test = np.vstack((X_test_v, X_test_u))
+    y_test = np.vstack((y_test_v, y_test_u))
     FAR, FRR = compute_FAR_FRR(model, X_test, y_test)
+
     print("\n---- Test Results ----")
+    print("Loss = {}, Accuracy = {}".format(loss, accuracy))
     print("FAR = {}, FRR = {}".format(FAR, FRR))
+
+    # Additional metrics
+    if args.metrics_path is not None:
+
+        # Confusion matrix
+        y_pred = model.predict(X_test_v)
+        y_pred = util.one_hot_to_index(y_pred)
+        y_true = util.one_hot_to_index(y_test_v)
+        conf_matrix = confusion_matrix(y_true, y_pred)
+        np.savetxt(args.metrics_path + "confusion_matrix.txt", conf_matrix)
 
 
 if __name__ == "__main__":

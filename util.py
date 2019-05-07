@@ -3,6 +3,34 @@ import random
 import numpy as np
 
 
+def load_examples(data_path):
+    """
+    Loads the following files from data_path:
+
+    X_train.npy, y_train.npy - Training data with only authorized users.
+    X_valid.npy, y_valid.npy - Validation data with only authorized users.
+    X_test_valid.npy, y_test_valid.npy - Test data with valid (i.e. authorized) users.
+    X_test_unknown.npy, y_test_unknown.npy - Test data with unknown (i.e. unauthorized) users.
+
+    These files can be generated with the script generate_examples.py
+
+    Returns:
+    Matrices X_{type} of shape (#examples, example_length, feature_length)
+    Matrices y_{type} of shape (#examples, #users)
+    """
+
+    X_train = np.load(data_path + "X_train.npy")
+    y_train = np.load(data_path + "y_train.npy")
+    X_valid = np.load(data_path + "X_valid.npy")
+    y_valid = np.load(data_path + "y_valid.npy")
+    X_test_v = np.load(data_path + "X_test_valid.npy")
+    y_test_v = np.load(data_path + "y_test_valid.npy")
+    X_test_u = np.load(data_path + "X_test_unknown.npy")
+    y_test_u = np.load(data_path + "y_test_unknown.npy")
+
+    return X_train, y_train, X_valid, y_valid, X_test_v, y_test_v, X_test_u, y_test_u
+
+
 def shuffle_data(X, y):
     """
     Shuffles the data in X, y with the same random permutation.
@@ -49,6 +77,40 @@ def split_data(X, y, train_frac, valid_frac, test_frac, shuffle=True):
     return (X_train, y_train, X_valid, y_valid, X_test, y_test)
 
 
+def index_to_one_hot(y, n_classes):
+    """
+    Converts a list of indices to one-hot encoding.
+    Example: y = [1, 0, 3] => np.array([[0, 1, 0, 0], [1, 0, 0, 0], [0, 0, 0, 1]])
+
+    If a label is -1 (unknown), its one-hot enoding becomes [-1, ..., -1]
+    """
+
+    if y.size == 0:
+        return y
+
+    minus_one = np.where(y == -1)
+    y = y.reshape(-1)
+    one_hot = np.eye(n_classes)[y]
+    one_hot[minus_one, :] = -np.ones((n_classes,))
+
+    return one_hot
+
+
+def one_hot_to_index(y):
+    """
+    Converts numpy array of one-hot encodings to list of indices.
+    Example: y = np.array([[0, 1, 0, 0], [1, 0, 0, 0], [0, 0, 0, 1]]) => [1, 0, 3]
+    """
+    indices = []
+    for num in y:
+        if np.nonzero(num)[0].size == 0:
+            indices.append(-1)
+        else:
+            indices.append(np.argmax(num))
+
+    return indices
+
+
 def split_per_user(X, y, train_frac, valid_frac, test_frac, shuffle=False):
     """
     Splits the data into train/valid/test while still ensuring that each
@@ -82,29 +144,6 @@ def split_per_user(X, y, train_frac, valid_frac, test_frac, shuffle=False):
         y_valid = np.vstack((y_valid, y_valid_sub)) if y_valid.size else y_valid_sub
         X_test = np.vstack((X_test, X_test_sub)) if X_test.size else X_test_sub
         y_test = np.vstack((y_test, y_test_sub)) if y_test.size else y_test_sub
-
-    return X_train, y_train, X_valid, y_valid, X_test, y_test
-
-
-def load_examples(data_path):
-    """
-    Loads the following files from data_path:
-
-    X_train.npy, y_train.npy
-    X_valid.npy, y_valid.npy
-    X_test.npy, y_test.npy
-
-    Returns:
-    Matrices X_{type} of shape (#examples, example_length, feature_length)
-    Matrices y_{type} of shape (#examples, #users)
-    """
-
-    X_train = np.load(data_path + "X_train.npy")
-    y_train = np.load(data_path + "y_train.npy")
-    X_valid = np.load(data_path + "X_valid.npy")
-    y_valid = np.load(data_path + "y_valid.npy")
-    X_test = np.load(data_path + "X_test.npy")
-    y_test = np.load(data_path + "y_test.npy")
 
     return X_train, y_train, X_valid, y_valid, X_test, y_test
 
@@ -199,37 +238,3 @@ def split_on_users(X, y, n_valid_users, pick_random=False, add_other=False, n_in
         return X_valid, y_valid, X_invalid, y_invalid, X_unknown, y_unknown
 
     return X_valid, y_valid, X_unknown, y_unknown
-
-
-def index_to_one_hot(y, n_classes):
-    """
-    Converts a list of indices to one-hot encoding.
-    Example: y = [1, 0, 3] => np.array([[0, 1, 0, 0], [1, 0, 0, 0], [0, 0, 0, 1]])
-
-    If a label is -1 (unknown), its one-hot enoding becomes [-1, ..., -1]
-    """
-
-    if y.size == 0:
-        return y
-
-    minus_one = np.where(y == -1)
-    y = y.reshape(-1)
-    one_hot = np.eye(n_classes)[y]
-    one_hot[minus_one, :] = -np.ones((n_classes,))
-
-    return one_hot
-
-
-def one_hot_to_index(y):
-    """
-    Converts numpy array of one-hot encodings to list of indices.
-    Example: y = np.array([[0, 1, 0, 0], [1, 0, 0, 0], [0, 0, 0, 1]]) => [1, 0, 3]
-    """
-    indices = []
-    for num in y:
-        if np.nonzero(num)[0].size == 0:
-            indices.append(-1)
-        else:
-            indices.append(np.nonzero(num)[0][0])
-
-    return indices

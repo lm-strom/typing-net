@@ -89,7 +89,7 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument(dest="input_path", metavar="INPUT_PATH", help="Path to read preprocessed typing data from.")
-    parser.add_argument(dest="output_path", metavar="OUTPUT_PATH", help="Path to write augmented data to.")
+    parser.add_argument(dest="output_path", metavar="OUTPUT_PATH", help="Path to write generated examples to.")
     parser.add_argument("-e", "--example_length", metavar="EXAMPLE_LENGTH", type=int, default=18, help="Number of keystrokes to use as one data example.")
     parser.add_argument("-train", "--train_frac", metavar="TRAIN_FRAC", type=float, default=0.8, help="Fraction of examples to use as training data.")
     parser.add_argument("-valid", "--valid_frac", metavar="VALID_FRAC", type=float, default=0.1, help="Fraction of examples to use as validation data.")
@@ -129,22 +129,20 @@ def main():
                                                                                  test_frac=args.test_frac, shuffle=False)
     X_test_u, y_test_u = X_u, y_u
 
-    # Concatenate test data from valid/unknown users
-    X_test = np.vstack((X_test_v, X_test_u))
-    y_test = np.vstack((y_test_v, y_test_u))
-
-    # Generate additional examples for each set
+    # Generate additional examples for each set (except the unknowns)
     X_train, y_train = generate_examples_from_adjacents(X_train, y_train, args.example_length, args.step_size)
     X_valid, y_valid = generate_examples_from_adjacents(X_valid, y_valid, args.example_length, args.step_size)
-    X_test, y_test = generate_examples_from_adjacents(X_test, y_test, args.example_length, args.step_size)
+    X_test_v, y_test_v = generate_examples_from_adjacents(X_test_v, y_test_v, args.example_length, args.step_size)
 
     # Save the data in output_path
     np.save(args.output_path + "X_train.npy", X_train)
     np.save(args.output_path + "y_train.npy", y_train)
     np.save(args.output_path + "X_valid.npy", X_valid)
     np.save(args.output_path + "y_valid.npy", y_valid)
-    np.save(args.output_path + "X_test.npy", X_test)
-    np.save(args.output_path + "y_test.npy", y_test)
+    np.save(args.output_path + "X_test_valid.npy", X_test_v)
+    np.save(args.output_path + "y_test_valid.npy", y_test_v)
+    np.save(args.output_path + "X_test_unknown.npy", X_test_u)
+    np.save(args.output_path + "y_test_unknown.npy", y_test_u)
 
     print("\nExample generation successful!")
     print("Numpy binary files were saved in: {}".format(args.output_path))
