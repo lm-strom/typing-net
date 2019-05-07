@@ -6,3 +6,4 @@ AWS
 __pycache__
 ._*.py
 *.npy
+*.hdf5

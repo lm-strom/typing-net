@@ -1,4 +1,5 @@
 import signal
+import os
 
 import argparse
 import numpy as np
@@ -7,14 +8,14 @@ from tqdm import tqdm
 from keras import optimizers
 from keras.models import Sequential
 from keras.layers import Dense, Flatten, Dropout
-from keras.layers import Conv1D
-from keras.callbacks import Callback
+from keras.layers import Conv1D, MaxPooling1D
+from keras.callbacks import Callback, ModelCheckpoint
 
 import util
 
 # Hyperparameters
 EPOCHS = 100
-DROPOUT_RATE = 0.9
+DROPOUT_RATE = 0.1
 BATCH_SIZE = 32
 LEARNING_RATE = 3e-4
 
@@ -122,8 +123,16 @@ def compute_FAR_FRR(trained_model, X_test, y_test):
 def main():
 
     parser = argparse.ArgumentParser()
-    parser.add_argument(dest="data_path", metavar="PATH", help="Path to read examples from.")
+    parser.add_argument(dest="data_path", metavar="DATA_PATH", help="Path to read examples from.")
+    parser.add_argument(dest="model_path", metavar="MODEL_PATH", help="Path to save trained model to.")
     args = parser.parse_args()
+
+    if not os.path.isdir(args.model_path):
+        response = input("Model path does not exist. Create it? (Y/n) >> ")
+        if response.lower() not in ["y", "yes", "1", ""]:
+            exit()
+        else:
+            os.makedirs(args.model_path)
 
     # Load all data
     X_train, y_train, X_valid, y_valid, X_test, y_test = util.load_examples(args.data_path)
@@ -144,8 +153,13 @@ def main():
 
     # Train model
     signal.signal(signal.SIGINT, handler)
-    terminate_on_flag = TerminateOnFlag()
-    model.fit(X_train, y_train, validation_data=(X_valid, y_valid), batch_size=BATCH_SIZE, epochs=EPOCHS, callbacks=[terminate_on_flag])
+    terminate_on_flag = TerminateOnFlag()  # Terminate training if CTRL+C
+    model_checkpoint = ModelCheckpoint(args.model_path + str(n_classes) + "_class_model_{epoch:02d}_{val_loss:.2f}.hdf5",
+                                       monitor="val_loss", save_best_only=True, verbose=1, period=5)  # Save model every 5 epochs
+
+    model.fit(X_train, y_train, validation_data=(X_valid, y_valid), batch_size=BATCH_SIZE,
+              epochs=EPOCHS, callbacks=[terminate_on_flag, model_checkpoint])
+
     global training_complete
     training_complete = True
 
