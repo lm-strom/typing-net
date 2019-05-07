@@ -127,22 +127,23 @@ def main():
     # Split the data into train/valid/test
     X_train, y_train, X_valid, y_valid, X_test_v, y_test_v = util.split_per_user(X_v, y_v, train_frac=args.train_frac, valid_frac=args.valid_frac,
                                                                                  test_frac=args.test_frac, shuffle=False)
+    # Save data from unknowns to be used as test data
     X_test_u, y_test_u = X_u, y_u
-
-    # Generate additional examples for each set (except the unknowns)
-    X_train, y_train = generate_examples_from_adjacents(X_train, y_train, args.example_length, args.step_size)
-    X_valid, y_valid = generate_examples_from_adjacents(X_valid, y_valid, args.example_length, args.step_size)
-    X_test_v, y_test_v = generate_examples_from_adjacents(X_test_v, y_test_v, args.example_length, args.step_size)
-
-    # Save the data in output_path
-    np.save(args.output_path + "X_train.npy", X_train)
-    np.save(args.output_path + "y_train.npy", y_train)
-    np.save(args.output_path + "X_valid.npy", X_valid)
-    np.save(args.output_path + "y_valid.npy", y_valid)
-    np.save(args.output_path + "X_test_valid.npy", X_test_v)
-    np.save(args.output_path + "y_test_valid.npy", y_test_v)
     np.save(args.output_path + "X_test_unknown.npy", X_test_u)
     np.save(args.output_path + "y_test_unknown.npy", y_test_u)
+
+    # Generate additional examples for each set (except the unknowns) and save
+    X_train, y_train = generate_examples_from_adjacents(X_train, y_train, args.example_length, args.step_size)
+    np.save(args.output_path + "X_train.npy", X_train)
+    np.save(args.output_path + "y_train.npy", y_train)
+
+    X_valid, y_valid = generate_examples_from_adjacents(X_valid, y_valid, args.example_length, args.step_size)
+    np.save(args.output_path + "X_valid.npy", X_valid)
+    np.save(args.output_path + "y_valid.npy", y_valid)
+
+    X_test_v, y_test_v = generate_examples_from_adjacents(X_test_v, y_test_v, args.example_length, args.step_size)
+    np.save(args.output_path + "X_test_valid.npy", X_test_v)
+    np.save(args.output_path + "y_test_valid.npy", y_test_v)
 
     print("\nExample generation successful!")
     print("Numpy binary files were saved in: {}".format(args.output_path))
