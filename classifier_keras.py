@@ -159,7 +159,7 @@ def main():
             else:
                 os.makedirs(args.save_path)
 
-    if args.matrics_path is not None:
+    if args.metrics_path is not None:
         if not os.path.isdir(args.metrics_path):
             response = input("Metrics path does not exist. Create it? (Y/n) >> ")
             if response.lower() not in ["y", "yes", "1", ""]:
