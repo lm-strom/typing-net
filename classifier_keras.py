@@ -167,8 +167,9 @@ def main():
             else:
                 os.makedirs(args.metrics_path)
 
-    # Load all data
-    X_train, y_train, X_valid, y_valid, X_test_v, y_test_v, X_test_u, y_test_u = util.load_examples(args.data_path)
+    # Load training and validation data
+    X_train, y_train = util.load_examples(args.data_path, "train")
+    X_valid, y_valid = util.load_examples(args.data_path, "valid")
 
     # Shuffle the data
     X_train, y_train = util.shuffle_data(X_train, y_train)
@@ -192,12 +193,16 @@ def main():
     global training_complete
     training_complete = True
 
+    # Load test data
+    X_test_v, y_test_v = util.load_examples(args.data_path, "test_valid")
+    X_test_u, y_test_u = util.load_examples(args.data_path, "test_unknown")
+    X_test = np.vstack((X_test_v, X_test_u))
+    y_test = np.vstack((y_test_v, y_test_u))
+
     # Test model
     print("Evaluating model...")
     loss, accuracy = model.evaluate(X_test_v, y_test_v, verbose=1)
 
-    X_test = np.vstack((X_test_v, X_test_u))
-    y_test = np.vstack((y_test_v, y_test_u))
     FAR, FRR = compute_FAR_FRR(model, X_test, y_test)
 
     print("\n---- Test Results ----")

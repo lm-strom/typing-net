@@ -3,11 +3,15 @@ import argparse
 
 import numpy as np
 from tqdm import tqdm
+import h5py
 
 import util
 
+# Constants
+FEATURE_LENGTH = 6
 
-def create_examples(input_path, example_length):
+
+def create_examples(input_path, data_file, example_length):
     """
     Loads all digraph data in input_path, creates examples of length example_length
     and corresponding labels.
@@ -17,10 +21,10 @@ def create_examples(input_path, example_length):
     Matrix y of shape (#examples, #users)
     """
 
-    X = []
-    y = []
-
     n_users = len(os.listdir(input_path))
+
+    X = []   # np.empty((0, example_length, FEATURE_LENGTH))
+    y = []  # np.empty((0, 1))
 
     print("Generating examples...")
     for i, user_file_name in tqdm(enumerate(os.listdir(input_path))):
@@ -33,7 +37,7 @@ def create_examples(input_path, example_length):
                 example.append(feature)
 
                 if len(example) == example_length:
-                    X.append(example)
+                    X.append(np.asarray(example))
                     y.append(i)
                     example = []
 
@@ -42,24 +46,34 @@ def create_examples(input_path, example_length):
 
     y = util.index_to_one_hot(y, n_users)
 
-    return X, y, n_users
+    data_file.create_dataset("X_plain", data=X, maxshape=(None, example_length, FEATURE_LENGTH), dtype=float)
+    data_file.create_dataset("y_plain", data=y, maxshape=(None, n_users), dtype=float)
+
+    return X, y
 
 
-def generate_examples_from_adjacents(X, y, example_length, step_size=1):
+def generate_examples_from_adjacents(X, y, dataset_name, data_file, step_size=1):
     """
     Parses through the data and generates (example_length - 1)//step_size
     additional examples from every pair of adjacent examples with the same label.
     The default step=1 generates *all* possible additional examples.
 
-    The generated examples are appended to the original data, and the full dataset is returned.
+    The new examples are iteratively written to the dataset with dataset_name in data_file.
     """
+
+    WRITE_CHUNK_SIZE = 1000
+
+    n_examples = X.shape[0]
+    example_length = X.shape[1]
+    n_users = y.shape[1]
 
     assert step_size <= example_length - 1 and step_size > 0, "Invalid step size. Must have 0 < step <= example_length - 1"
 
-    n_examples = X.shape[0]
+    name_X = "X_" + dataset_name
+    name_y = "y_" + dataset_name
 
-    X_additional = np.empty((0,) + X.shape[1:])
-    y_additional = np.empty((0, y.shape[1]))
+    X_additional = np.empty((0, example_length, FEATURE_LENGTH))
+    y_additional = np.empty((0, n_users))
 
     print("Augmenting to generate additional examples...")
     for i in tqdm(range(n_examples - 1)):
@@ -79,10 +93,15 @@ def generate_examples_from_adjacents(X, y, example_length, step_size=1):
             X_additional = np.append(X_additional, new_example, axis=0)
             y_additional = np.append(y_additional, new_label, axis=0)
 
-    X = np.vstack((X, X_additional))
-    y = np.vstack((y, y_additional))
+        if X_additional.shape[0] >= WRITE_CHUNK_SIZE:
+            data_file[name_X].resize(data_file[name_X].shape[0] + X_additional.shape[0], axis=0)
+            data_file[name_X][-X_additional.shape[0]:] = X_additional
 
-    return X, y
+            data_file[name_y].resize(data_file[name_y].shape[0] + y_additional.shape[0], axis=0)
+            data_file[name_y][-y_additional.shape[0]:] = y_additional
+
+            X_additional = np.empty((0, example_length, FEATURE_LENGTH))
+            y_additional = np.empty((0, n_users))
 
 
 def main():
@@ -112,42 +131,50 @@ def main():
         else:
             os.makedirs(args.output_path)
 
-    if len(os.listdir(args.output_path)) > 0:
-        response = input("Output directory is not empty. Numpy files may be overwritten. Continue? (Y/n) >> ")
+    data_file_name = str(args.n_valid_users) + "_users_" + str(int(100*args.train_frac)) + "_" + str(int(100*args.valid_frac)) + "_" + str(int(100*args.test_frac)) + ".hdf5"
+
+    if os.path.isfile(args.output_path + data_file_name):
+        response = input("Output directory contains identical dataset. Do you want to overwrite it? (Y/n) >> ")
         if response.lower() not in ["y", "yes", "1", ""]:
             exit()
 
+    n_users = len(os.listdir(args.input_path))
+    assert args.n_valid_users < n_users, "Number of valid users must be smaller than the total number of users in the input data."
+
+    # Create h5py file to store the data in
+    data_file = h5py.File(args.output_path + data_file_name, "w")
+
     # Create the regular examples
-    X, y, n_users = create_examples(args.input_path, args.example_length)
+    X, y = create_examples(args.input_path, data_file, args.example_length)
 
     # Split into set of valid (v) and unknown (u) users (and relabel accordingly)
-    assert args.n_valid_users < n_users, "Number of valid users must be smaller than the total number of users in the input data."
     X_v, y_v, X_u, y_u = util.split_on_users(X, y, n_valid_users=args.n_valid_users, pick_random=False)
 
     # Split the data into train/valid/test
     X_train, y_train, X_valid, y_valid, X_test_v, y_test_v = util.split_per_user(X_v, y_v, train_frac=args.train_frac, valid_frac=args.valid_frac,
                                                                                  test_frac=args.test_frac, shuffle=False)
+
     # Save data from unknowns to be used as test data
     X_test_u, y_test_u = X_u, y_u
-    np.save(args.output_path + "X_test_unknown.npy", X_test_u)
-    np.save(args.output_path + "y_test_unknown.npy", y_test_u)
+    data_file.create_dataset("X_test_unknown", data=X_test_u, dtype=float)
+    data_file.create_dataset("y_test_unknown", data=y_test_u, dtype=float)
 
     # Generate additional examples for each set (except the unknowns) and save
-    X_train, y_train = generate_examples_from_adjacents(X_train, y_train, args.example_length, args.step_size)
-    np.save(args.output_path + "X_train.npy", X_train)
-    np.save(args.output_path + "y_train.npy", y_train)
+    data_file.create_dataset("X_train", data=X_train, maxshape=(None, args.example_length, FEATURE_LENGTH), dtype=float)
+    data_file.create_dataset("y_train", data=y_train, maxshape=(None, n_users), dtype=float)
+    generate_examples_from_adjacents(X_train, y_train, "train", data_file, args.step_size)
 
-    X_valid, y_valid = generate_examples_from_adjacents(X_valid, y_valid, args.example_length, args.step_size)
-    np.save(args.output_path + "X_valid.npy", X_valid)
-    np.save(args.output_path + "y_valid.npy", y_valid)
+    data_file.create_dataset("X_valid", data=X_valid, maxshape=(None, args.example_length, FEATURE_LENGTH), dtype=float)
+    data_file.create_dataset("y_valid", data=y_valid, maxshape=(None, n_users), dtype=float)
+    generate_examples_from_adjacents(X_valid, y_valid, "valid", data_file, args.step_size)
 
-    X_test_v, y_test_v = generate_examples_from_adjacents(X_test_v, y_test_v, args.example_length, args.step_size)
-    np.save(args.output_path + "X_test_valid.npy", X_test_v)
-    np.save(args.output_path + "y_test_valid.npy", y_test_v)
+    data_file.create_dataset("X_test_valid", data=X_test_v, maxshape=(None, args.example_length, FEATURE_LENGTH), dtype=float)
+    data_file.create_dataset("y_test_valid", data=y_test_v, maxshape=(None, n_users), dtype=float)
+    generate_examples_from_adjacents(X_test_v, y_test_v, "test_valid", data_file, args.step_size)
 
     print("\nExample generation successful!")
-    print("Numpy binary files were saved in: {}".format(args.output_path))
-    print("Use np.load(file) to read them.")
+    print("Datasets are saved in: {}".format(args.output_path + data_file_name))
+    print("Use h5py to read them.")
 
 
 if __name__ == "__main__":

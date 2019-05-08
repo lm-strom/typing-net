@@ -1,34 +1,35 @@
 import random
+import os
+import h5py
 
 import numpy as np
 
 
-def load_examples(data_path):
+def load_examples(data_path, dataset_name):
     """
-    Loads the following files from data_path:
+    Loads the following datasets from data_path:
 
-    X_train.npy, y_train.npy - Training data with only authorized users.
-    X_valid.npy, y_valid.npy - Validation data with only authorized users.
-    X_test_valid.npy, y_test_valid.npy - Test data with valid (i.e. authorized) users.
-    X_test_unknown.npy, y_test_unknown.npy - Test data with unknown (i.e. unauthorized) users.
+    X_train, y_train - Training data with only authorized users.
+    X_valid, y_valid - Validation data with only authorized users.
+    X_test_valid, y_test_valid - Test data with valid (i.e. authorized) users.
+    X_test_unknown, y_test_unknown - Test data with unknown (i.e. unauthorized) users.
 
-    These files can be generated with the script generate_examples.py
+    These datasets can be generated with the script generate_examples.py
 
     Returns:
     Matrices X_{type} of shape (#examples, example_length, feature_length)
     Matrices y_{type} of shape (#examples, #users)
     """
 
-    X_train = np.load(data_path + "X_train.npy")
-    y_train = np.load(data_path + "y_train.npy")
-    X_valid = np.load(data_path + "X_valid.npy")
-    y_valid = np.load(data_path + "y_valid.npy")
-    X_test_v = np.load(data_path + "X_test_valid.npy")
-    y_test_v = np.load(data_path + "y_test_valid.npy")
-    X_test_u = np.load(data_path + "X_test_unknown.npy")
-    y_test_u = np.load(data_path + "y_test_unknown.npy")
+    if not os.path.isfile(data_path):
+        print("The file {} does not exist".format(data_path))
+        exit()
 
-    return X_train, y_train, X_valid, y_valid, X_test_v, y_test_v, X_test_u, y_test_u
+    data_file = h5py.File(data_path, "r")
+    X = data_file["X_" + dataset_name][()]
+    y = data_file["y_" + dataset_name][()]
+
+    return X, y
 
 
 def shuffle_data(X, y):
