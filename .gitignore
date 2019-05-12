@@ -2,6 +2,7 @@
 data
 preprocessed_data
 virtual_enviroment
+metrics
 AWS
 __pycache__
 ._*.py

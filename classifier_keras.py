@@ -16,7 +16,7 @@ from sklearn.metrics import confusion_matrix
 import util
 
 # Hyperparameters
-EPOCHS = 10
+EPOCHS = 1000
 DROPOUT_RATE = 0.1
 BATCH_SIZE = 32
 LEARNING_RATE = 3e-4
@@ -58,13 +58,19 @@ def build_model(input_shape, n_classes):
     model = Sequential()
 
     # Convolutional layers
-    model.add(Conv1D(128, 2, activation="relu", input_shape=input_shape))
+    model.add(Conv1D(2*128, 2, activation="relu", input_shape=input_shape))
     model.add(Dropout(rate=DROPOUT_RATE))
-    model.add(Conv1D(128, 2, activation="relu"))
+    model.add(Conv1D(2*128, 2, activation="relu"))
     model.add(Dropout(rate=DROPOUT_RATE))
-    model.add(Conv1D(128, 2, activation="relu"))
+    model.add(Conv1D(2*128, 2, activation="relu"))
     model.add(Dropout(rate=DROPOUT_RATE))
-    model.add(Conv1D(64, 2, activation="relu"))
+    model.add(Conv1D(2*128, 2, activation="relu"))
+    model.add(Dropout(rate=DROPOUT_RATE))
+    model.add(Conv1D(2*64, 2, activation="relu"))
+    model.add(Dropout(rate=DROPOUT_RATE))
+    model.add(Conv1D(2*64, 2, activation="relu"))
+    model.add(Dropout(rate=DROPOUT_RATE))
+    model.add(Conv1D(2*64, 2, activation="relu"))
     model.add(Dropout(rate=DROPOUT_RATE))
 
     model.add(Flatten())
