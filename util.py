@@ -102,6 +102,12 @@ def one_hot_to_index(y):
     Converts numpy array of one-hot encodings to list of indices.
     Example: y = np.array([[0, 1, 0, 0], [1, 0, 0, 0], [0, 0, 0, 1]]) => [1, 0, 3]
     """
+    if len(y.shape) == 1 or y.shape[1] == 0:
+        if np.nonzero(y)[0].size == 0:
+            return -1
+        else:
+            return np.argmax(y)
+
     indices = []
     for num in y:
         if np.nonzero(num)[0].size == 0:
