@@ -6,7 +6,7 @@ import numpy as np
 from tqdm import tqdm
 import h5py
 
-import util
+import models.util as util
 
 # Constants
 FEATURE_LENGTH = 6

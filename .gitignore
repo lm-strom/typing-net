@@ -1,9 +1,10 @@
 *.DS_Store
 data
-preprocessed_data
+processed_data
 virtual_enviroment
 metrics
 AWS
 __pycache__
 ._*.py
 *.hdf5
+*.txt
