@@ -1,5 +1,6 @@
 import os
 import argparse
+import random
 
 import numpy as np
 from tqdm import tqdm
@@ -104,19 +105,58 @@ def generate_examples_from_adjacents(X, y, dataset_name, data_file, step_size=1)
             y_additional = np.empty((0, n_users))
 
 
-def main():
+def split_all_users(X_data_name, y_data_name, output_name, data_file, append_randoms=False):
+    """
+    Splits the data into one dataset for each user. Writes each new dataset to the
+    datafile with the names "X_user_{USER NUMBER}" and "y_user_{USER NUMBER}".
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument(dest="input_path", metavar="INPUT_PATH", help="Path to read preprocessed typing data from.")
-    parser.add_argument(dest="output_path", metavar="OUTPUT_PATH", help="Path to write generated examples to.")
-    parser.add_argument("-e", "--example_length", metavar="EXAMPLE_LENGTH", type=int, default=18, help="Number of keystrokes to use as one data example.")
-    parser.add_argument("-train", "--train_frac", metavar="TRAIN_FRAC", type=float, default=0.8, help="Fraction of examples to use as training data.")
-    parser.add_argument("-valid", "--valid_frac", metavar="VALID_FRAC", type=float, default=0.1, help="Fraction of examples to use as validation data.")
-    parser.add_argument("-test", "--test_frac", metavar="TEST_FRAC", type=float, default=0.1, help="Fraction of examples to use as test data.")
-    parser.add_argument("-n_valid", "--n_valid_users", metavar="N_VALID_USERS", type=int, default=8, help="Number of random users to select as authorixed users.")
-    parser.add_argument("-s", "--step_size", metavar="STEP_SIZE", type=int, default=None,
-                        help="Step size to use when generating additional examples. A step size s will yield (example_length - 1)//s additional examples per original example.")
-    args = parser.parse_args()
+    Relabels every example with the integer 1, since the user identity can now be inferred
+    from which dataset it is in.
+
+    If append_randoms is True, an equal number of random examples from random other users
+    are appended to each user's dataset, with the label 0.
+    """
+
+    n_examples = data_file[X_data_name].shape[0]
+    n_users = data_file[y_data_name].shape[1]
+
+    # Find which examples belong to which user
+    print("Preparing split on users...")
+    user_ind_dict = {j: [] for j in range(n_users)}
+    for i in tqdm(range(n_examples)):
+        j = util.one_hot_to_index(data_file[y_data_name][i, :])
+        user_ind_dict[j].append(i)
+
+    # Extract the data for each user (append randoms if specified)
+    print("Splitting into one dataset per user...")
+    for j in tqdm(range(n_users)):
+        X_user_j = data_file[X_data_name][user_ind_dict[j], :, :]
+        n_examples_user_j = X_user_j.shape[0]
+        y_user_j = np.ones((n_examples_user_j,))
+
+        N_RANDOM_USERS = n_users//2
+        if append_randoms:
+            random_users = random.sample(list(range(j)) + list(range(j + 1, n_users)), N_RANDOM_USERS)
+            for random_user in random_users:
+                example_inds = user_ind_dict[random_user]
+                random_example_inds = random.sample(example_inds, n_examples_user_j//N_RANDOM_USERS)
+                random_example_inds.sort()
+
+                X_user_j = np.append(X_user_j, data_file[X_data_name][random_example_inds, :, :], axis=0)
+                y_user_j = np.append(y_user_j, np.zeros((len(random_example_inds),)), axis=0)
+
+        # Save the data
+        X_name_user_j = "X_" + output_name + "_user_" + str(j)
+        y_name_user_j = "y_" + output_name + "_user_" + str(j)
+
+        data_file.create_dataset(X_name_user_j, data=X_user_j, dtype=float)
+        data_file.create_dataset(y_name_user_j, data=y_user_j, dtype=float)
+
+
+def parse_args(args):
+    """
+    Checks that the provided arguments are valid and returns data file name.
+    """
 
     # Check that input args are valid
     assert args.train_frac + args.valid_frac + args.test_frac == 1, "Specified train/valid/train fractions do not sum to 1."
@@ -131,15 +171,46 @@ def main():
         else:
             os.makedirs(args.output_path)
 
-    data_file_name = str(args.n_valid_users) + "_users_" + str(int(100*args.train_frac)) + "_" + str(int(100*args.valid_frac)) + "_" + str(int(100*args.test_frac)) + ".hdf5"
+    n_users = len(os.listdir(args.input_path))
+
+    if args.mode == "joint":
+        assert args.n_valid_users is not None, "Number of valid users must be specified in mode 'joint'."
+        assert args.n_valid_users < n_users, "Number of valid users must be smaller than the total number of users in the input data."
+    elif args.mode == "separated":
+        assert args.n_valid_users is None, "n_valid_users should not be specified in mode 'separated'."
+
+    if args.mode == "joint":
+        data_file_name = str(args.n_valid_users) + "_users_joint_" + str(int(100*args.train_frac)) + "_" + str(int(100*args.valid_frac)) + "_" + str(int(100*args.test_frac)) + ".hdf5"
+    elif args.mode == "separated":
+        data_file_name = str(n_users) + "_users_separated_" + str(int(100*args.train_frac)) + "_" + str(int(100*args.valid_frac)) + "_" + str(int(100*args.test_frac)) + ".hdf5"
 
     if os.path.isfile(args.output_path + data_file_name):
         response = input("Output directory contains identical dataset. Do you want to overwrite it? (Y/n) >> ")
         if response.lower() not in ["y", "yes", "1", ""]:
             exit()
 
+    return data_file_name
+
+
+def main():
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument(dest="input_path", metavar="INPUT_PATH", help="Path to read preprocessed typing data from.")
+    parser.add_argument(dest="output_path", metavar="OUTPUT_PATH", help="Path to write generated examples to.")
+    parser.add_argument("-m", "--mode", metavar="MODE", choices=("joint", "separated"), default="joint",
+                        help="Determines if the datasets should be separated per user (sperated) or put in one joint dataset (joint). See code comments for details.")
+    parser.add_argument("-e", "--example_length", metavar="EXAMPLE_LENGTH", type=int, default=18, help="Number of keystrokes to use as one data example.")
+    parser.add_argument("-train", "--train_frac", metavar="TRAIN_FRAC", type=float, default=0.8, help="Fraction of examples to use as training data.")
+    parser.add_argument("-valid", "--valid_frac", metavar="VALID_FRAC", type=float, default=0.1, help="Fraction of examples to use as validation data.")
+    parser.add_argument("-test", "--test_frac", metavar="TEST_FRAC", type=float, default=0.1, help="Fraction of examples to use as test data.")
+    parser.add_argument("-n_valid", "--n_valid_users", metavar="N_VALID_USERS", type=int, default=None, help="Number of random users to select as authorized users.")
+    parser.add_argument("-s", "--step_size", metavar="STEP_SIZE", type=int, default=None,
+                        help="Step size to use when generating additional examples. A step size s will yield (example_length - 1)//s additional examples per original example.")
+    args = parser.parse_args()
+
+    # Check that arguments are valid and determine data file name
+    data_file_name = parse_args(args)
     n_users = len(os.listdir(args.input_path))
-    assert args.n_valid_users < n_users, "Number of valid users must be smaller than the total number of users in the input data."
 
     # Create h5py file to store the data in
     data_file = h5py.File(args.output_path + data_file_name, "w")
@@ -147,30 +218,54 @@ def main():
     # Create the regular examples
     X, y = create_examples(args.input_path, data_file, args.example_length)
 
-    # Split into set of valid (v) and unknown (u) users (and relabel accordingly)
-    X_v, y_v, X_u, y_u = util.split_on_users(X, y, n_valid_users=args.n_valid_users, pick_random=False)
+    if args.mode == "joint":
 
-    # Split the data into train/valid/test
-    X_train, y_train, X_valid, y_valid, X_test_v, y_test_v = util.split_per_user(X_v, y_v, train_frac=args.train_frac, valid_frac=args.valid_frac,
-                                                                                 test_frac=args.test_frac, shuffle=False)
+        # Split into set of valid (v) and unknown (u) users (and relabel accordingly)
+        X_v, y_v, X_u, y_u = util.split_on_users(X, y, n_valid_users=args.n_valid_users, pick_random=False)
 
-    # Save data from unknowns to be used as test data
-    X_test_u, y_test_u = X_u, y_u
-    data_file.create_dataset("X_test_unknown", data=X_test_u, dtype=float)
-    data_file.create_dataset("y_test_unknown", data=y_test_u, dtype=float)
+        # Split the data into train/valid/test
+        X_train, y_train, X_valid, y_valid, X_test_v, y_test_v = util.split_per_user(X_v, y_v, train_frac=args.train_frac, valid_frac=args.valid_frac,
+                                                                                     test_frac=args.test_frac, shuffle=False)
 
-    # Generate additional examples for each set (except the unknowns) and save
-    data_file.create_dataset("X_train", data=X_train, maxshape=(None, args.example_length, FEATURE_LENGTH), dtype=float)
-    data_file.create_dataset("y_train", data=y_train, maxshape=(None, n_users), dtype=float)
-    generate_examples_from_adjacents(X_train, y_train, "train", data_file, args.step_size)
+        # Save data from unknowns to be used as test data
+        X_test_u, y_test_u = X_u, y_u
+        data_file.create_dataset("X_test_unknown", data=X_test_u, dtype=float)
+        data_file.create_dataset("y_test_unknown", data=y_test_u, dtype=float)
 
-    data_file.create_dataset("X_valid", data=X_valid, maxshape=(None, args.example_length, FEATURE_LENGTH), dtype=float)
-    data_file.create_dataset("y_valid", data=y_valid, maxshape=(None, n_users), dtype=float)
-    generate_examples_from_adjacents(X_valid, y_valid, "valid", data_file, args.step_size)
+        # Generate additional examples for each set (except the unknowns) and save
+        data_file.create_dataset("X_train", data=X_train, maxshape=(None, args.example_length, FEATURE_LENGTH), dtype=float)
+        data_file.create_dataset("y_train", data=y_train, maxshape=(None, n_users), dtype=float)
+        generate_examples_from_adjacents(X_train, y_train, "train", data_file, args.step_size)
 
-    data_file.create_dataset("X_test_valid", data=X_test_v, maxshape=(None, args.example_length, FEATURE_LENGTH), dtype=float)
-    data_file.create_dataset("y_test_valid", data=y_test_v, maxshape=(None, n_users), dtype=float)
-    generate_examples_from_adjacents(X_test_v, y_test_v, "test_valid", data_file, args.step_size)
+        data_file.create_dataset("X_valid", data=X_valid, maxshape=(None, args.example_length, FEATURE_LENGTH), dtype=float)
+        data_file.create_dataset("y_valid", data=y_valid, maxshape=(None, n_users), dtype=float)
+        generate_examples_from_adjacents(X_valid, y_valid, "valid", data_file, args.step_size)
+
+        data_file.create_dataset("X_test_valid", data=X_test_v, maxshape=(None, args.example_length, FEATURE_LENGTH), dtype=float)
+        data_file.create_dataset("y_test_valid", data=y_test_v, maxshape=(None, n_users), dtype=float)
+        generate_examples_from_adjacents(X_test_v, y_test_v, "test_valid", data_file, args.step_size)
+
+    elif args.mode == "separated":
+
+        X_train, y_train, X_valid, y_valid, X_test, y_test = util.split_per_user(X, y, args.train_frac, args.valid_frac, args.test_frac, shuffle=False)
+
+        # Generate additional examples and save in the h5py file
+        data_file.create_dataset("X_train_full", data=X_train, maxshape=(None, args.example_length, FEATURE_LENGTH), dtype=float)
+        data_file.create_dataset("y_train_full", data=y_train, maxshape=(None, n_users), dtype=float)
+        generate_examples_from_adjacents(X_train, y_train, "train_full", data_file, args.step_size)
+
+        data_file.create_dataset("X_valid_full", data=X_valid, maxshape=(None, args.example_length, FEATURE_LENGTH), dtype=float)
+        data_file.create_dataset("y_valid_full", data=y_valid, maxshape=(None, n_users), dtype=float)
+        generate_examples_from_adjacents(X_valid, y_valid, "valid_full", data_file, args.step_size)
+
+        data_file.create_dataset("X_test_full", data=X_test, maxshape=(None, args.example_length, FEATURE_LENGTH), dtype=float)
+        data_file.create_dataset("y_test_full", data=y_test, maxshape=(None, n_users), dtype=float)
+        generate_examples_from_adjacents(X_test, y_test, "test_full", data_file, args.step_size)
+
+        # Split the data so that every user gets its own dataset (with some random data from other users appended)
+        split_all_users("X_train_full", "y_train_full", "train", data_file, append_randoms=True)
+        split_all_users("X_valid_full", "y_valid_full", "valid", data_file, append_randoms=True)
+        split_all_users("X_test_full", "y_test_full", "test", data_file, append_randoms=True)
 
     print("\nExample generation successful!")
     print("Datasets are saved in: {}".format(args.output_path + data_file_name))
