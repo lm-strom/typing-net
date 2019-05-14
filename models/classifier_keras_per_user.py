@@ -1,3 +1,8 @@
+"""
+Builds one binary classifier for every user, and fits it to their data
+(and random negative examples from other users).
+"""
+
 import signal
 import os
 

@@ -1,3 +1,8 @@
+"""
+Multi-class classifier to determine user from their typing data.
+"""
+
+
 import signal
 import os
 
