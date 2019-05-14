@@ -1,3 +1,4 @@
+import sys
 import os
 import argparse
 import random
@@ -6,7 +7,8 @@ import numpy as np
 from tqdm import tqdm
 import h5py
 
-sys.path.insert(0, '../models/')  # so that utils can be imported
+assert os.getcwd().split("/")[-1] == "typing-net", "Preprocessing scripts must run from typing-net/ directory."
+sys.path.insert(0, 'models/')  # so that utils can be imported
 import utils
 
 # Constants

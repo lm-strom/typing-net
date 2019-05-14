@@ -3,7 +3,6 @@ Builds a siamese CNN and trains it to embed typing data from same user to be sim
 and typing data from different users to be dissimilar.
 
 Adapted from:
-
 https://github.com/divyashan/time_series/blob/master/models/supervised/siamese_triplet_keras.py
 """
 
@@ -55,7 +54,7 @@ def build_tower_cnn_model(input_shape):
     return model
 
 
-def euclidean_distance(vects):
+def _euclidean_distance(vects):
     """
     Computes euclidean distance between tuple of vectors.
     """
@@ -63,7 +62,7 @@ def euclidean_distance(vects):
     return K.sqrt(K.maximum(K.sum(K.square(x - y), axis=1, keepdims=True), K.epsilon()))
 
 
-def eucl_dist_output_shape(shapes):
+def _eucl_dist_output_shape(shapes):
     """
     Wat?
     """
@@ -71,12 +70,12 @@ def eucl_dist_output_shape(shapes):
     return (shape1[0], 1)
 
 
-def triplet_distance(vects):
+def _triplet_distance(vects):
     """
     Computes triplet loss for single triplet.
     """
     A, P, N = vects
-    return euclidean_distance([A, P]) - euclidean_distance([A, N]) + ALPHA
+    return _euclidean_distance([A, P]) - _euclidean_distance([A, N]) + ALPHA
 
 
 def build_triplet_model(input_shape, tower_model):
@@ -94,20 +93,37 @@ def build_triplet_model(input_shape, tower_model):
     x_B = tower_model(input_B)
     x_C = tower_model(input_C)
 
-    distance = Lambda(triplet_distance, output_shape=eucl_dist_output_shape)([x_A, x_B, x_C])
+    distance = Lambda(_triplet_distance, output_shape=_eucl_dist_output_shape)([x_A, x_B, x_C])
 
     model = Model([input_A, input_B, input_C], distance, name='siamese')
 
     return model
 
 
-def main():
+def plot_with_PCA(X_embedded, y):
+    """
+    Applies PCA (with n_components=2) to X_embedded and plots
+    resulting (x_1, x_2) in 2D, with color indicating class.
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument(dest="data_path", metavar="DATA_PATH", help="Path to read examples from.")
-    parser.add_argument("-s", "--save_path", metavar="SAVE_PATH", default=None, help="Path to save trained model to. If no path is specified checkpoints are not saved.")
-    parser.add_argument("-m", "--metrics-path", metavar="METRICS_PATH", default=None, help="Path to save additional performance metrics to (for debugging purposes).")
-    args = parser.parse_args()
+    Scikit-learn has PCA: https://scikit-learn.org/stable/modules/generated/sklearn.decomposition.PCA.html
+    """
+    pass  # TODO
+
+
+def plot_with_t_SNE(X_embedded, y):
+    """
+    Applies t-SNE (with n_components=2) to X_embedded and plots
+    resulting (x_1, x_2) in 2D, with color indicating class.
+
+    Scikit-learn has t-SNE: https://scikit-learn.org/stable/modules/generated/sklearn.manifold.TSNE.html
+    """
+    pass  # TODO
+
+
+def parse_args(args):
+    """
+    Checks that input args are valid.
+    """
 
     if args.save_path is not None:
         if not os.path.isdir(args.save_path):
@@ -125,7 +141,16 @@ def main():
             else:
                 os.makedirs(args.metrics_path)
 
-    # Load triplets for training
+
+def main():
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument(dest="data_path", metavar="DATA_PATH", help="Path to read examples from.")
+    parser.add_argument("-s", "--save_path", metavar="SAVE_PATH", default=None, help="Path to save trained model to. If no path is specified checkpoints are not saved.")
+    parser.add_argument("-m", "--metrics-path", metavar="METRICS_PATH", default=None, help="Path to save additional performance metrics to (for debugging purposes).")
+    args = parser.parse_args()
+
+    # Load training triplets and validation triplets
     X_train_anchors, _ = utils.load_examples(args.data_path, "train_anchors")
     X_train_positives, _ = utils.load_examples(args.data_path, "train_positives")
     X_train_negatives, _ = utils.load_examples(args.data_path, "train_negatives")
@@ -142,23 +167,28 @@ def main():
     adam = Adam(lr=LEARNING_RATE)
     triplet_model.compile(optimizer=adam, loss='mean_squared_error')
 
-    # Train model
+    # Create dummy y = 0 (since output of siamese model is triplet loss)
     y_train_dummy = np.zeros((X_train_anchors.shape[0],))  # dummy y for triplet training
     y_valid_dummy = np.zeros((X_valid_anchors.shape[0],))
-    print(y_train_dummy.shape)
-    print(X_train_anchors.shape)
+
+    # Train the model
     triplet_model.fit([X_train_anchors, X_train_positives, X_train_negatives], y_train_dummy,
                       validation_data=([X_valid_anchors, X_valid_positives, X_valid_negatives], y_valid_dummy),
                       epochs=EPOCHS, batch_size=BATCH_SIZE)
 
-    # Using fit_generator (probably not necessary for us because data is limited)
-    # triplet_model.fit_generator(gen_batch(X_train, tr_trip_idxs, batch_size, dummy_y), epochs=1, steps_per_epoch=n_batches_per_epoch)
 
-    # train_embedding = tower_model.predict(X_train)
-    # test_embedding = tower_model.predict(X_test)
+    # This is how you can embed data using the trained model:
 
-    # Evaluation function found in util.py of the git repo (might use later)
+    # embedding = tower_model.predict(X)
+
+
+    # Other things that may be useful later:
+
+    # Evaluation function found in util.py of the Jiffy git repo
     # print(evaluate_test_embedding(train_embedding, y_train, test_embedding, y_test))
+
+    # Training using fit_generator (probably not necessary for us because data is limited)
+    # triplet_model.fit_generator(gen_batch(X_train, tr_trip_idxs, batch_size, dummy_y), epochs=1, steps_per_epoch=n_batches_per_epoch)
 
 
 if __name__ == "__main__":

@@ -6,7 +6,8 @@ import numpy as np
 from tqdm import tqdm
 import h5py
 
-sys.path.insert(0, '../models/')  # so that utils can be imported
+assert os.getcwd().split("/")[-1] == "typing-net", "Preprocessing scripts must run from typing-net/ directory."
+sys.path.insert(0, 'models/')  # so that utils can be imported
 import utils
 
 
@@ -136,7 +137,7 @@ def create_triplets(X_data_name, y_data_name, output_name, data_file):
     X_negatives_name = "X_" + output_name + "_negatives"
     y_negatives_name = "y_" + output_name + "_negatives"
 
-    # Generate dictionary of indices where users are
+    # Generate dictionary mapping user id to example indices
     print("Preparing generation of triplets...")
     user_ind_dict = {j: [] for j in range(n_users)}
     for i in tqdm(range(n_examples)):
@@ -159,14 +160,15 @@ def create_triplets(X_data_name, y_data_name, output_name, data_file):
         negative_X = np.expand_dims(data_file[X_data_name][negative_choice, :, :], axis=0)
         negative_y = np.expand_dims(data_file[y_data_name][negative_choice, :], axis=0)
 
-        np.append(X_anchors, anchor_X, axis=0)
-        np.append(y_anchors, anchor_y, axis=0)
-        np.append(X_positives, positive_X, axis=0)
-        np.append(y_positives, positive_y, axis=0)
-        np.append(X_negatives, negative_X, axis=0)
-        np.append(y_negatives, negative_y, axis=0)
+        X_anchors = np.append(X_anchors, anchor_X, axis=0)
+        y_anchors = np.append(y_anchors, anchor_y, axis=0)
+        X_positives = np.append(X_positives, positive_X, axis=0)
+        y_positives = np.append(y_positives, positive_y, axis=0)
+        X_negatives = np.append(X_negatives, negative_X, axis=0)
+        y_negatives = np.append(y_negatives, negative_y, axis=0)
 
         if X_anchors.shape[0] >= WRITE_CHUNK_SIZE:
+
             data_file[X_anchors_name].resize(data_file[X_anchors_name].shape[0] + X_anchors.shape[0], axis=0)
             data_file[X_anchors_name][-X_anchors.shape[0]:] = X_anchors
             data_file[y_anchors_name].resize(data_file[y_anchors_name].shape[0] + y_anchors.shape[0], axis=0)
@@ -232,7 +234,7 @@ def main():
 
     # Split the data into train/valid/test
     X_train, y_train, X_valid, y_valid, X_test, y_test = utils.split_data(X, y, train_frac=args.train_frac, valid_frac=args.valid_frac,
-                                                                         test_frac=args.test_frac, shuffle=False)
+                                                                          test_frac=args.test_frac, shuffle=False)
 
     # Generate additional examples for each set and save
     data_file.create_dataset("X_train_singles", data=X_train, maxshape=(None, args.example_length, FEATURE_LENGTH), dtype=float)
@@ -247,29 +249,39 @@ def main():
     data_file.create_dataset("y_test", data=y_test, maxshape=(None, n_users), dtype=float)
     generate_examples_from_adjacents(X_test, y_test, "test", data_file, args.step_size)
 
-    # Generate triplets from the training and validation data
+    # Create datasets for triplet training data
     data_file.create_dataset("X_train_anchors", shape=(0, args.example_length, FEATURE_LENGTH),
                              maxshape=(None, args.example_length, FEATURE_LENGTH), dtype=float)
     data_file.create_dataset("y_train_anchors", shape=(0, n_users), maxshape=(None, n_users), dtype=float)
+
     data_file.create_dataset("X_train_positives", shape=(0, args.example_length, FEATURE_LENGTH),
                              maxshape=(None, args.example_length, FEATURE_LENGTH), dtype=float)
     data_file.create_dataset("y_train_positives", shape=(0, n_users), maxshape=(None, n_users), dtype=float)
+
     data_file.create_dataset("X_train_negatives", shape=(0, args.example_length, FEATURE_LENGTH),
                              maxshape=(None, args.example_length, FEATURE_LENGTH), dtype=float)
     data_file.create_dataset("y_train_negatives", shape=(0, n_users), maxshape=(None, n_users), dtype=float)
 
+    # Generate training triplets
     create_triplets("X_train_singles", "y_train_singles", output_name="train", data_file=data_file)
 
+    print(data_file["X_train_anchors"].shape)
+
+    # Create datasets for triplet validation data
     data_file.create_dataset("X_valid_anchors", shape=(0, args.example_length, FEATURE_LENGTH),
                              maxshape=(None, args.example_length, FEATURE_LENGTH), dtype=float)
     data_file.create_dataset("y_valid_anchors", shape=(0, n_users), maxshape=(None, n_users), dtype=float)
+
     data_file.create_dataset("X_valid_positives", shape=(0, args.example_length, FEATURE_LENGTH),
                              maxshape=(None, args.example_length, FEATURE_LENGTH), dtype=float)
     data_file.create_dataset("y_valid_positives", shape=(0, n_users), maxshape=(None, n_users), dtype=float)
+
     data_file.create_dataset("X_valid_negatives", shape=(0, args.example_length, FEATURE_LENGTH),
                              maxshape=(None, args.example_length, FEATURE_LENGTH), dtype=float)
+
     data_file.create_dataset("y_valid_negatives", shape=(0, n_users), maxshape=(None, n_users), dtype=float)
 
+    # Generate validation triplets
     create_triplets("X_valid_singles", "y_valid_singles", output_name="valid", data_file=data_file)
 
     print("\nTriplet generation successful!")

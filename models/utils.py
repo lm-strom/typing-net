@@ -7,18 +7,19 @@ import numpy as np
 
 def load_examples(data_path, dataset_name):
     """
-    Loads the following datasets from data_path:
+    Loads the datasets with names:
 
-    X_train, y_train - Training data with only authorized users.
-    X_valid, y_valid - Validation data with only authorized users.
-    X_test_valid, y_test_valid - Test data with valid (i.e. authorized) users.
-    X_test_unknown, y_test_unknown - Test data with unknown (i.e. unauthorized) users.
+    X_{dataset_name}
+    y_{dataset_name}
 
-    These datasets can be generated with the script generate_examples.py
+    from the hdf5 file specified by data_path.
+
+    These datasets can be generated with the scripts generate_examples.py
+    and generate_triplets.py, in preprocessing/
 
     Returns:
-    Matrices X_{type} of shape (#examples, example_length, feature_length)
-    Matrices y_{type} of shape (#examples, #users)
+    Matrix X of shape (#examples, example_length, feature_length)
+    Matrix y of shape (#examples, #users)
     """
 
     if not os.path.isfile(data_path):
@@ -52,6 +53,9 @@ def load_examples_of_user(data_path, user_nr, set_type):
 def shuffle_data(X, y, one_hot_labels=True):
     """
     Shuffles the data in X, y with the same random permutation.
+
+    Use one_hot_labels to specify whether the labels in y are
+    in one-hot or index format.
     """
 
     n_examples = X.shape[0]
@@ -119,8 +123,11 @@ def index_to_one_hot(y, n_classes):
 
 def one_hot_to_index(y):
     """
-    Converts numpy array of one-hot encodings to list of indices.
+    Converts 2D numpy array of one-hot encodings to list of indices.
     Example: y = np.array([[0, 1, 0, 0], [1, 0, 0, 0], [0, 0, 0, 1]]) => [1, 0, 3]
+
+    If input is 1D (i.e. a single one-hot encoding) its corresponding index is output
+    as a scalar.
     """
     if len(y.shape) == 1 or y.shape[1] == 0:
         if np.nonzero(y)[0].size == 0:
@@ -141,7 +148,7 @@ def one_hot_to_index(y):
 def split_per_user(X, y, train_frac, valid_frac, test_frac, shuffle=False):
     """
     Splits the data into train/valid/test while still ensuring that each
-    set has class balance. Does NOT shuffle the data before splitting by default.
+    set has class balance. Does *not* shuffle the data before splitting by default.
     """
 
     np.random.seed(1)
@@ -180,7 +187,7 @@ def split_on_users(X, y, n_valid_users, pick_random=False, add_other=False, n_in
     If add_other is False (default):
 
     Splits the given dataset into two sets:
-    X_valid, y_valid - Data from the set of n_valid_users random users that are authorized.
+    X_valid, y_valid - Data from a set of n_valid_users selected users that are authorized.
     X_unknown, y_unknown - Data from the remaining set of users
 
     Data is relabeled as one-hot for valid users, and [-1, ..., -1] for unknown users.
@@ -192,8 +199,8 @@ def split_on_users(X, y, n_valid_users, pick_random=False, add_other=False, n_in
     n_invalid_users must be specified.
 
     Splits the given dataset into three sets:
-    X_valid, y_valid - Data from the set of n_valid_users that are authorized.
-    X_invalid, y_invalid - Data from a set of n_invalid_users that are known to be unauthorized.
+    X_valid, y_valid - Data from a set of n_valid_users selected users that are authorized.
+    X_invalid, y_invalid - Data from a set of n_invalid_users randomly selected users that are known to be unauthorized.
     X_unknown, y_unknown - Data from users that are unauthorized, but never gets seen during training.
 
     Data is relabeled as one-hot with dimension (n_valid_users + 1) for valid and invalid users
