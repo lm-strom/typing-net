@@ -1,11 +1,14 @@
 import os
+import sys
 import argparse
 
 import numpy as np
 from tqdm import tqdm
 import h5py
 
-import models.util as util
+sys.path.insert(0, '../models/')  # so that utils can be imported
+import utils
+
 
 # Constants
 FEATURE_LENGTH = 6
@@ -44,7 +47,7 @@ def create_examples(input_path, data_file, example_length):
     X = np.asarray(X)
     y = np.asarray(y)
 
-    y = util.index_to_one_hot(y, n_users)
+    y = utils.index_to_one_hot(y, n_users)
 
     data_file.create_dataset("X_plain", data=X, maxshape=(None, example_length, FEATURE_LENGTH), dtype=float)
     data_file.create_dataset("y_plain", data=y, maxshape=(None, n_users), dtype=float)
@@ -137,7 +140,7 @@ def create_triplets(X_data_name, y_data_name, output_name, data_file):
     print("Preparing generation of triplets...")
     user_ind_dict = {j: [] for j in range(n_users)}
     for i in tqdm(range(n_examples)):
-        j = util.one_hot_to_index(data_file[y_data_name][i, :])
+        j = utils.one_hot_to_index(data_file[y_data_name][i, :])
         user_ind_dict[j].append(i)
 
     print("Creating triplets from single examples...")
@@ -146,12 +149,12 @@ def create_triplets(X_data_name, y_data_name, output_name, data_file):
         anchor_X = np.expand_dims(data_file[X_data_name][i, :, :], axis=0)
         anchor_y = np.expand_dims(data_file[y_data_name][i, :], axis=0)
 
-        positives_inds = user_ind_dict[util.one_hot_to_index(anchor_y[0])]
+        positives_inds = user_ind_dict[utils.one_hot_to_index(anchor_y[0])]
         positive_choice = np.random.choice(positives_inds)
         positive_X = np.expand_dims(data_file[X_data_name][positive_choice, :, :], axis=0)
         positive_y = np.expand_dims(data_file[y_data_name][positive_choice, :, ], axis=0)
 
-        negatives_inds = user_ind_dict[util.one_hot_to_index(anchor_y[0])]
+        negatives_inds = user_ind_dict[utils.one_hot_to_index(anchor_y[0])]
         negative_choice = np.random.choice(negatives_inds)
         negative_X = np.expand_dims(data_file[X_data_name][negative_choice, :, :], axis=0)
         negative_y = np.expand_dims(data_file[y_data_name][negative_choice, :], axis=0)
@@ -228,8 +231,8 @@ def main():
     n_users = y.shape[1]
 
     # Split the data into train/valid/test
-    X_train, y_train, X_valid, y_valid, X_test, y_test = util.split_data(X, y, train_frac=args.train_frac, valid_frac=args.valid_frac,
-                                                                             test_frac=args.test_frac, shuffle=False)
+    X_train, y_train, X_valid, y_valid, X_test, y_test = utils.split_data(X, y, train_frac=args.train_frac, valid_frac=args.valid_frac,
+                                                                         test_frac=args.test_frac, shuffle=False)
 
     # Generate additional examples for each set and save
     data_file.create_dataset("X_train_singles", data=X_train, maxshape=(None, args.example_length, FEATURE_LENGTH), dtype=float)

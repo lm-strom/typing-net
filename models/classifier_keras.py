@@ -2,7 +2,6 @@
 Multi-class classifier to determine user from their typing data.
 """
 
-
 import signal
 import os
 
@@ -18,7 +17,7 @@ from keras.callbacks import Callback, ModelCheckpoint
 
 from sklearn.metrics import confusion_matrix
 
-import util
+import utils
 
 # Hyperparameters
 EPOCHS = 1000
@@ -179,12 +178,12 @@ def main():
                 os.makedirs(args.metrics_path)
 
     # Load training and validation data
-    X_train, y_train = util.load_examples(args.data_path, "train")
-    X_valid, y_valid = util.load_examples(args.data_path, "valid")
+    X_train, y_train = utils.load_examples(args.data_path, "train")
+    X_valid, y_valid = utils.load_examples(args.data_path, "valid")
 
     # Shuffle the data
-    X_train, y_train = util.shuffle_data(X_train, y_train)
-    X_valid, y_valid = util.shuffle_data(X_valid, y_valid)
+    X_train, y_train = utils.shuffle_data(X_train, y_train)
+    X_valid, y_valid = utils.shuffle_data(X_valid, y_valid)
 
     # Build model
     input_shape = X_train.shape[1:]
@@ -205,8 +204,8 @@ def main():
     training_complete = True
 
     # Load test data
-    X_test_v, y_test_v = util.load_examples(args.data_path, "test_valid")
-    X_test_u, y_test_u = util.load_examples(args.data_path, "test_unknown")
+    X_test_v, y_test_v = utils.load_examples(args.data_path, "test_valid")
+    X_test_u, y_test_u = utils.load_examples(args.data_path, "test_unknown")
     X_test = np.vstack((X_test_v, X_test_u))
     y_test = np.vstack((y_test_v, y_test_u))
 
@@ -225,8 +224,8 @@ def main():
 
         # Confusion matrix
         y_pred = model.predict(X_test_v)
-        y_pred = util.one_hot_to_index(y_pred)
-        y_true = util.one_hot_to_index(y_test_v)
+        y_pred = utils.one_hot_to_index(y_pred)
+        y_true = utils.one_hot_to_index(y_test_v)
         conf_matrix = confusion_matrix(y_true, y_pred)
         np.savetxt(args.metrics_path + "confusion_matrix.txt", conf_matrix)
 

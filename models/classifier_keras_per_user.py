@@ -18,7 +18,7 @@ from keras.callbacks import Callback, ModelCheckpoint
 
 from sklearn.metrics import confusion_matrix
 
-import util
+import utils
 
 # Hyperparameters
 EPOCHS = 25
@@ -172,12 +172,12 @@ def main():
     for user_nr in range(n_users):
 
         # Load training and validation data
-        X_train, y_train = util.load_examples_of_user(args.data_path, user_nr, "train")
-        X_valid, y_valid = util.load_examples_of_user(args.data_path, user_nr, "valid")
+        X_train, y_train = utils.load_examples_of_user(args.data_path, user_nr, "train")
+        X_valid, y_valid = utils.load_examples_of_user(args.data_path, user_nr, "valid")
 
         # Shuffle the data
-        X_train, y_train = util.shuffle_data(X_train, y_train, one_hot_labels=False)
-        X_valid, y_valid = util.shuffle_data(X_valid, y_valid, one_hot_labels=False)
+        X_train, y_train = utils.shuffle_data(X_train, y_train, one_hot_labels=False)
+        X_valid, y_valid = utils.shuffle_data(X_valid, y_valid, one_hot_labels=False)
 
         # Build model
         input_shape = X_train.shape[1:]
@@ -198,7 +198,7 @@ def main():
         training_complete = True
 
         # Load test data
-        X_test, y_test = util.load_examples_of_user(args.data_path, user_nr, "test")
+        X_test, y_test = utils.load_examples_of_user(args.data_path, user_nr, "test")
 
         # Test model
         print("Evaluating model...")

@@ -7,11 +7,14 @@ Adapted from:
 https://github.com/divyashan/time_series/blob/master/models/supervised/siamese_triplet_keras.py
 """
 
+import os
+import argparse
+
 import numpy as np
 
 from keras.models import Model
 from keras.layers import Dense, Input, Lambda
-from keras.layers import Conv2D, MaxPooling2D, Flatten
+from keras.layers import Conv1D, MaxPooling1D, Flatten
 from keras.optimizers import Adam
 import keras.backend as K
 
@@ -21,8 +24,13 @@ import keras.backend as K
 # from keras.layers import SimpleRNN
 # from keras import initializers
 
+import utils
+
 # Parameters
 ALPHA = 1  # Triplet loss threshold
+LEARNING_RATE = 1e-6
+EPOCHS = 100
+BATCH_SIZE = 50
 
 
 def build_tower_cnn_model(input_shape):
@@ -36,8 +44,8 @@ def build_tower_cnn_model(input_shape):
     n_channels = [16]
     x = x0
     for i in range(len(n_channels)):
-        x = Conv2D(n_channels[i], kernel_size=kernel, strides=(2, 2), activation='relu', padding='same')(x)
-        x = MaxPooling2D((5, 1))(x)
+        x = Conv1D(n_channels[i], kernel_size=kernel, strides=2, activation='relu', padding='same')(x)
+        x = MaxPooling1D(5)(x)
 
     x = Flatten()(x)
     y = Dense(40, name='dense_encoding')(x)
@@ -67,8 +75,8 @@ def triplet_distance(vects):
     """
     Computes triplet loss for single triplet.
     """
-    a, s, d = vects
-    return euclidean_distance([a, s]) - euclidean_distance([a, d]) + ALPHA
+    A, P, N = vects
+    return euclidean_distance([A, P]) - euclidean_distance([A, N]) + ALPHA
 
 
 def build_triplet_model(input_shape, tower_model):
@@ -95,24 +103,59 @@ def build_triplet_model(input_shape, tower_model):
 
 def main():
 
-    X_train, y_train = np.array([]), np.array([])  # placeholder - training set of single examples
-    X_test, y_test = np.array([]), np.array([])  # placeholder - test set of single examples
-    input_shape = (1, 2)  # placeholder - shape of single input
+    parser = argparse.ArgumentParser()
+    parser.add_argument(dest="data_path", metavar="DATA_PATH", help="Path to read examples from.")
+    parser.add_argument("-s", "--save_path", metavar="SAVE_PATH", default=None, help="Path to save trained model to. If no path is specified checkpoints are not saved.")
+    parser.add_argument("-m", "--metrics-path", metavar="METRICS_PATH", default=None, help="Path to save additional performance metrics to (for debugging purposes).")
+    args = parser.parse_args()
 
-    adam = Adam(lr=0.000001)
+    if args.save_path is not None:
+        if not os.path.isdir(args.save_path):
+            response = input("Save path does not exist. Create it? (Y/n) >> ")
+            if response.lower() not in ["y", "yes", "1", ""]:
+                exit()
+            else:
+                os.makedirs(args.save_path)
 
+    if args.metrics_path is not None:
+        if not os.path.isdir(args.metrics_path):
+            response = input("Metrics path does not exist. Create it? (Y/n) >> ")
+            if response.lower() not in ["y", "yes", "1", ""]:
+                exit()
+            else:
+                os.makedirs(args.metrics_path)
+
+    # Load triplets for training
+    X_train_anchors, _ = utils.load_examples(args.data_path, "train_anchors")
+    X_train_positives, _ = utils.load_examples(args.data_path, "train_positives")
+    X_train_negatives, _ = utils.load_examples(args.data_path, "train_negatives")
+    X_valid_anchors, _ = utils.load_examples(args.data_path, "valid_anchors")
+    X_valid_positives, _ = utils.load_examples(args.data_path, "valid_positives")
+    X_valid_negatives, _ = utils.load_examples(args.data_path, "valid_negatives")
+
+    # Build model
+    input_shape = X_train_anchors.shape[1:]
     tower_model = build_tower_cnn_model(input_shape)  # single input model
     triplet_model = build_triplet_model(input_shape, tower_model)  # siamese model
 
+    # Compile model
+    adam = Adam(lr=LEARNING_RATE)
     triplet_model.compile(optimizer=adam, loss='mean_squared_error')
 
-    # triplet_model.fit([tr_pairs[:,0,:,:], tr_pairs[:,1,:,:]], tr_y, epochs=100, batch_size=50, validation_split=.05)
+    # Train model
+    y_train_dummy = np.zeros((X_train_anchors.shape[0],))  # dummy y for triplet training
+    y_valid_dummy = np.zeros((X_valid_anchors.shape[0],))
+    print(y_train_dummy.shape)
+    print(X_train_anchors.shape)
+    triplet_model.fit([X_train_anchors, X_train_positives, X_train_negatives], y_train_dummy,
+                      validation_data=([X_valid_anchors, X_valid_positives, X_valid_negatives], y_valid_dummy),
+                      epochs=EPOCHS, batch_size=BATCH_SIZE)
 
     # Using fit_generator (probably not necessary for us because data is limited)
     # triplet_model.fit_generator(gen_batch(X_train, tr_trip_idxs, batch_size, dummy_y), epochs=1, steps_per_epoch=n_batches_per_epoch)
 
-    train_embedding = tower_model.predict(X_train)
-    test_embedding = tower_model.predict(X_test)
+    # train_embedding = tower_model.predict(X_train)
+    # test_embedding = tower_model.predict(X_test)
 
     # Evaluation function found in util.py of the git repo (might use later)
     # print(evaluate_test_embedding(train_embedding, y_train, test_embedding, y_test))

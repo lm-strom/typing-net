@@ -6,7 +6,8 @@ import numpy as np
 from tqdm import tqdm
 import h5py
 
-import models.util as util
+sys.path.insert(0, '../models/')  # so that utils can be imported
+import utils
 
 # Constants
 FEATURE_LENGTH = 6
@@ -45,7 +46,7 @@ def create_examples(input_path, data_file, example_length):
     X = np.asarray(X)
     y = np.asarray(y)
 
-    y = util.index_to_one_hot(y, n_users)
+    y = utils.index_to_one_hot(y, n_users)
 
     data_file.create_dataset("X_plain", data=X, maxshape=(None, example_length, FEATURE_LENGTH), dtype=float)
     data_file.create_dataset("y_plain", data=y, maxshape=(None, n_users), dtype=float)
@@ -124,7 +125,7 @@ def split_all_users(X_data_name, y_data_name, output_name, data_file, append_ran
     print("Preparing split on users...")
     user_ind_dict = {j: [] for j in range(n_users)}
     for i in tqdm(range(n_examples)):
-        j = util.one_hot_to_index(data_file[y_data_name][i, :])
+        j = utils.one_hot_to_index(data_file[y_data_name][i, :])
         user_ind_dict[j].append(i)
 
     # Extract the data for each user (append randoms if specified)
@@ -221,10 +222,10 @@ def main():
     if args.mode == "joint":
 
         # Split into set of valid (v) and unknown (u) users (and relabel accordingly)
-        X_v, y_v, X_u, y_u = util.split_on_users(X, y, n_valid_users=args.n_valid_users, pick_random=False)
+        X_v, y_v, X_u, y_u = utils.split_on_users(X, y, n_valid_users=args.n_valid_users, pick_random=False)
 
         # Split the data into train/valid/test
-        X_train, y_train, X_valid, y_valid, X_test_v, y_test_v = util.split_per_user(X_v, y_v, train_frac=args.train_frac, valid_frac=args.valid_frac,
+        X_train, y_train, X_valid, y_valid, X_test_v, y_test_v = utils.split_per_user(X_v, y_v, train_frac=args.train_frac, valid_frac=args.valid_frac,
                                                                                      test_frac=args.test_frac, shuffle=False)
 
         # Save data from unknowns to be used as test data
@@ -247,7 +248,7 @@ def main():
 
     elif args.mode == "separated":
 
-        X_train, y_train, X_valid, y_valid, X_test, y_test = util.split_per_user(X, y, args.train_frac, args.valid_frac, args.test_frac, shuffle=False)
+        X_train, y_train, X_valid, y_valid, X_test, y_test = utils.split_per_user(X, y, args.train_frac, args.valid_frac, args.test_frac, shuffle=False)
 
         # Generate additional examples and save in the h5py file
         data_file.create_dataset("X_train_full", data=X_train, maxshape=(None, args.example_length, FEATURE_LENGTH), dtype=float)
