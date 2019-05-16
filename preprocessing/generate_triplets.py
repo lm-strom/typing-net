@@ -209,7 +209,7 @@ def main():
     assert args.train_frac + args.valid_frac + args.test_frac == 1, "Specified train/valid/train fractions do not sum to 1."
 
     if args.step_size is None:
-        args.step_size = args.example_length - 1
+        args.step_size = 1
 
     if not os.path.isdir(args.output_path):
         response = input("Output path does not exist. Create it? (Y/n) >> ")
