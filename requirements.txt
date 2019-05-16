@@ -1,3 +1,5 @@
 keras
 tensorflow
 tqdm
+sklearn
+matplotlib
