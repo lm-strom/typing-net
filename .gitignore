@@ -4,6 +4,7 @@ virtual_enviroment
 metrics
 AWS
 
+*.hdf5
 __pycache__
 ._*.py
 *.DS_Store
