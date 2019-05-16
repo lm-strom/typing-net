@@ -31,8 +31,10 @@ def create_examples(input_path, data_file, example_length):
     y = []  # np.empty((0, 1))
 
     print("Generating examples...")
-    for i, user_file_name in tqdm(enumerate(os.listdir(input_path))):
+    i = 0
+    for user_file_name in tqdm(os.listdir(input_path)):
         if user_file_name[0] == ".":
+            n_users -= 1
             continue
         with open(input_path + user_file_name, "r") as user_file:
             example = []
@@ -44,6 +46,7 @@ def create_examples(input_path, data_file, example_length):
                     X.append(np.asarray(example))
                     y.append(i)
                     example = []
+        i += 1
 
     X = np.asarray(X)
     y = np.asarray(y)
@@ -151,23 +154,28 @@ def create_triplets(X_data_name, y_data_name, output_name, data_file):
         anchor_y = np.expand_dims(data_file[y_data_name][i, :], axis=0)
 
         positives_inds = user_ind_dict[utils.one_hot_to_index(anchor_y[0])]
-        positive_choice = np.random.choice(positives_inds)
-        positive_X = np.expand_dims(data_file[X_data_name][positive_choice, :, :], axis=0)
-        positive_y = np.expand_dims(data_file[y_data_name][positive_choice, :, ], axis=0)
 
-        negatives_inds = user_ind_dict[utils.one_hot_to_index(anchor_y[0])]
-        negative_choice = np.random.choice(negatives_inds)
-        negative_X = np.expand_dims(data_file[X_data_name][negative_choice, :, :], axis=0)
-        negative_y = np.expand_dims(data_file[y_data_name][negative_choice, :], axis=0)
+        for ii in range(5):
+            positive_choice = np.random.choice(positives_inds)
+            positive_X = np.expand_dims(data_file[X_data_name][positive_choice, :, :], axis=0)
+            positive_y = np.expand_dims(data_file[y_data_name][positive_choice, :, ], axis=0)
 
-        X_anchors = np.append(X_anchors, anchor_X, axis=0)
-        y_anchors = np.append(y_anchors, anchor_y, axis=0)
-        X_positives = np.append(X_positives, positive_X, axis=0)
-        y_positives = np.append(y_positives, positive_y, axis=0)
-        X_negatives = np.append(X_negatives, negative_X, axis=0)
-        y_negatives = np.append(y_negatives, negative_y, axis=0)
+            user_ids = list(user_ind_dict.keys())
+            user_ids.remove(utils.one_hot_to_index(anchor_y[0]))
+            random_user = np.random.choice(user_ids)
+            negatives_inds = user_ind_dict[random_user]
+            negative_choice = np.random.choice(negatives_inds)
+            negative_X = np.expand_dims(data_file[X_data_name][negative_choice, :, :], axis=0)
+            negative_y = np.expand_dims(data_file[y_data_name][negative_choice, :], axis=0)
 
-        if X_anchors.shape[0] >= WRITE_CHUNK_SIZE:
+            X_anchors = np.append(X_anchors, anchor_X, axis=0)
+            y_anchors = np.append(y_anchors, anchor_y, axis=0)
+            X_positives = np.append(X_positives, positive_X, axis=0)
+            y_positives = np.append(y_positives, positive_y, axis=0)
+            X_negatives = np.append(X_negatives, negative_X, axis=0)
+            y_negatives = np.append(y_negatives, negative_y, axis=0)
+
+        if X_anchors.shape[0] >= WRITE_CHUNK_SIZE or i == n_examples-1:
 
             data_file[X_anchors_name].resize(data_file[X_anchors_name].shape[0] + X_anchors.shape[0], axis=0)
             data_file[X_anchors_name][-X_anchors.shape[0]:] = X_anchors
@@ -233,8 +241,7 @@ def main():
     n_users = y.shape[1]
 
     # Split the data into train/valid/test
-    X_train, y_train, X_valid, y_valid, X_test, y_test = utils.split_data(X, y, train_frac=args.train_frac, valid_frac=args.valid_frac,
-                                                                          test_frac=args.test_frac, shuffle=False)
+    X_train, y_train, X_valid, y_valid, X_test, y_test = utils.split_per_user(X, y, train_frac=args.train_frac, valid_frac=args.valid_frac, test_frac=args.test_frac, shuffle=False)
 
     # Generate additional examples for each set and save
     data_file.create_dataset("X_train_singles", data=X_train, maxshape=(None, args.example_length, FEATURE_LENGTH), dtype=float)
@@ -264,8 +271,6 @@ def main():
 
     # Generate training triplets
     create_triplets("X_train_singles", "y_train_singles", output_name="train", data_file=data_file)
-
-    print(data_file["X_train_anchors"].shape)
 
     # Create datasets for triplet validation data
     data_file.create_dataset("X_valid_anchors", shape=(0, args.example_length, FEATURE_LENGTH),

@@ -80,7 +80,7 @@ def setup_callbacks(save_path):
 
     if save_path is not None:
         model_checkpoint = ModelCheckpoint(save_path + "_class_model_{epoch:02d}_{val_loss:.2f}.hdf5",
-                                           monitor="val_loss", save_best_only=True, verbose=1, period=100)  # Save model every 100 epochs
+                                           monitor="val_loss", save_best_only=True, verbose=1, period=50)  # Save model every 100 epochs
         callback_list.append(model_checkpoint)
 
     return callback_list
@@ -129,7 +129,7 @@ def _triplet_distance(vects):
     Computes triplet loss for single triplet.
     """
     A, P, N = vects
-    return _euclidean_distance([A, P]) - _euclidean_distance([A, N]) + ALPHA
+    return K.maximum(_euclidean_distance([A, P]) - _euclidean_distance([A, N]) + ALPHA, 0.0)
 
 
 def build_triplet_model(input_shape, tower_model):
@@ -161,7 +161,6 @@ def plot_with_PCA(X_embedded, y):
 
     Scikit-learn has PCA: https://scikit-learn.org/stable/modules/generated/sklearn.decomposition.PCA.html
     """
-    import matplotlib.pyplot as plt
     pca = PCA(n_components=2)
 
     X_embedded = StandardScaler().fit_transform(X_embedded)
@@ -169,6 +168,7 @@ def plot_with_PCA(X_embedded, y):
 
     y = np.array(utils.one_hot_to_index(y))
 
+    import matplotlib.pyplot as plt
     plt.scatter(X_embedded[:,0], X_embedded[:,1], c=y)
     plt.show()
 
@@ -180,7 +180,6 @@ def plot_with_TSNE(X_embedded, y):
 
     Scikit-learn has t-SNE: https://scikit-learn.org/stable/modules/generated/sklearn.manifold.TSNE.html
     """
-    import matplotlib.pyplot as plt
     tsne = TSNE(n_components=2, verbose=1)
 
     X_embedded = StandardScaler().fit_transform(X_embedded)
@@ -188,6 +187,7 @@ def plot_with_TSNE(X_embedded, y):
 
     y = np.array(utils.one_hot_to_index(y))
 
+    import matplotlib.pyplot as plt
     plt.scatter(X_embedded[:,0], X_embedded[:,1], c=y)
     plt.show()
 
@@ -230,7 +230,7 @@ def main():
     X_train_anchors, y_train_anchors = utils.load_examples(args.data_path, "train_anchors")
     X_train_positives, _ = utils.load_examples(args.data_path, "train_positives")
     X_train_negatives, _ = utils.load_examples(args.data_path, "train_negatives")
-    X_valid_anchors, _ = utils.load_examples(args.data_path, "valid_anchors")
+    X_valid_anchors, y_valid_anchors = utils.load_examples(args.data_path, "valid_anchors")
     X_valid_positives, _ = utils.load_examples(args.data_path, "valid_positives")
     X_valid_negatives, _ = utils.load_examples(args.data_path, "valid_negatives")
 
@@ -249,13 +249,11 @@ def main():
     triplet_model.compile(optimizer=adam, loss='mean_squared_error')
 
     # Create dummy y = 0 (since output of siamese model is triplet loss)
-    y_train_dummy = np.zeros((X_train_anchors.shape[0],))  # dummy y for triplet training
+    y_train_dummy = np.zeros((X_train_anchors.shape[0],))
     y_valid_dummy = np.zeros((X_valid_anchors.shape[0],))
 
     # Train the model
-    triplet_model.fit([X_train_anchors, X_train_positives, X_train_negatives], y_train_dummy,
-                      validation_data=([X_valid_anchors, X_valid_positives, X_valid_negatives], y_valid_dummy),
-                      epochs=EPOCHS, batch_size=BATCH_SIZE, callbacks=callback_list)
+    triplet_model.fit([X_train_anchors, X_train_positives, X_train_negatives], y_train_dummy, validation_data=([X_valid_anchors, X_valid_positives, X_valid_negatives], y_valid_dummy), epochs=EPOCHS, batch_size=BATCH_SIZE, callbacks=callback_list)
     global training_complete
     training_complete = True
 
@@ -263,12 +261,12 @@ def main():
     if args.save_path is not None:
         triplet_model.save_weights(args.save_path + "final_weights.hdf5")
 
-    # Plot PCA
+    # Plot PCA/TSNE
     X, Y = utils.shuffle_data(X_train_anchors, y_train_anchors, one_hot_labels=True)
-    X = X[:1000,:]
-    Y = Y[:1000,:]
+    X = X[:5000,:,:]
+    Y = Y[:5000,:]
     X = tower_model.predict(X)
-    plot_with_TSNE(X, Y)
+    plot_with_PCA(X, Y)
 
 
     # This is how you can embed data using the trained model:
