@@ -13,6 +13,7 @@ import argparse
 import numpy as np
 
 from sklearn.decomposition import PCA
+from sklearn.manifold import TSNE
 from sklearn.preprocessing import StandardScaler
 
 #import matplotlib.pyplot as plt    ////    Import done in function "plot_with_PCA" to stop matplotlib from launching early.
@@ -172,14 +173,23 @@ def plot_with_PCA(X_embedded, y):
     plt.show()
 
 
-def plot_with_t_SNE(X_embedded, y):
+def plot_with_TSNE(X_embedded, y):
     """
     Applies t-SNE (with n_components=2) to X_embedded and plots
     resulting (x_1, x_2) in 2D, with color indicating class.
 
     Scikit-learn has t-SNE: https://scikit-learn.org/stable/modules/generated/sklearn.manifold.TSNE.html
     """
-    pass  # TODO
+    import matplotlib.pyplot as plt
+    tsne = TSNE(n_components=2, verbose=1)
+
+    X_embedded = StandardScaler().fit_transform(X_embedded)
+    X_embedded = tsne.fit_transform(X_embedded)
+
+    y = np.array(utils.one_hot_to_index(y))
+
+    plt.scatter(X_embedded[:,0], X_embedded[:,1], c=y)
+    plt.show()
 
 
 def parse_args(args):
@@ -254,8 +264,11 @@ def main():
         triplet_model.save_weights(args.save_path + "final_weights.hdf5")
 
     # Plot PCA
-    X_embedded = tower_model.predict(X_train_anchors)
-    plot_with_PCA(X_embedded, y_train_anchors)
+    X, Y = utils.shuffle_data(X_train_anchors, y_train_anchors, one_hot_labels=True)
+    X = X[:1000,:]
+    Y = Y[:1000,:]
+    X = tower_model.predict(X)
+    plot_with_TSNE(X, Y)
 
 
     # This is how you can embed data using the trained model:

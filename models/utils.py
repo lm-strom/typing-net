@@ -170,8 +170,7 @@ def split_per_user(X, y, train_frac, valid_frac, test_frac, shuffle=False):
 
     for user in range(n_users):
         user_inds = np.where(y[:, user] == 1)[0]
-        X_train_sub, y_train_sub, X_valid_sub, y_valid_sub, X_test_sub, y_test_sub = split_data(X[user_inds, :, :], y[user_inds, :],
-                                                                                                train_frac, valid_frac, test_frac, shuffle=False)
+        X_train_sub, y_train_sub, X_valid_sub, y_valid_sub, X_test_sub, y_test_sub = split_data(X[user_inds, :, :], y[user_inds, :], train_frac, valid_frac, test_frac, shuffle=False)
         X_train = np.vstack((X_train, X_train_sub)) if X_train.size else X_train_sub
         y_train = np.vstack((y_train, y_train_sub)) if y_train.size else y_train_sub
         X_valid = np.vstack((X_valid, X_valid_sub)) if X_valid.size else X_valid_sub
