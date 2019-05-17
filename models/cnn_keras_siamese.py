@@ -79,8 +79,7 @@ def setup_callbacks(save_path):
     callback_list.append(TerminateOnFlag())  # Terminate training if CTRL+C
 
     if save_path is not None:
-        model_checkpoint = ModelCheckpoint(save_path + "_class_model_{epoch:02d}_{val_loss:.2f}.hdf5",
-                                           monitor="val_loss", save_best_only=True, verbose=1, period=50)  # Save model every 100 epochs
+        model_checkpoint = ModelCheckpoint(save_path + "_class_model_{epoch:02d}_{val_loss:.2f}.hdf5", monitor="val_loss", save_best_only=True, verbose=1, period=50)  # Save model every 100 epochs
         callback_list.append(model_checkpoint)
 
     return callback_list
@@ -197,13 +196,13 @@ def parse_args(args):
     Checks that input args are valid.
     """
 
-    if args.save_path is not None:
-        if not os.path.isdir(args.save_path):
-            response = input("Save path does not exist. Create it? (Y/n) >> ")
+    if args.save_weights_path is not None:
+        if not os.path.isdir(args.save_weights_path):
+            response = input("Save weights path does not exist. Create it? (Y/n) >> ")
             if response.lower() not in ["y", "yes", "1", ""]:
                 exit()
             else:
-                os.makedirs(args.save_path)
+                os.makedirs(args.save_weights_path)
 
     if args.metrics_path is not None:
         if not os.path.isdir(args.metrics_path):
@@ -216,10 +215,11 @@ def parse_args(args):
 
 def main():
 
-		# Parse arguments
+	# Parse arguments
     parser = argparse.ArgumentParser()
     parser.add_argument(dest="data_path", metavar="DATA_PATH", help="Path to read examples from.")
-    parser.add_argument("-s", "--save_path", metavar="SAVE_PATH", default=None, help="Path to save trained model to. If no path is specified checkpoints are not saved.")
+    parser.add_argument("-sW", "--save_weights_path", metavar="SAVE_WEIGHTS_PATH", default=None, help="Path to save trained weights to. If no path is specified checkpoints are not saved.")
+    parser.add_argument("-sM", "--save_model_path", metavar="SAVE_MODEL_PATH", default=None, help="Path to save trained model to.")
     parser.add_argument("-l", "--load_path", metavar="LOAD_PATH", default=None, help="Path to load trained model from. If no path is specified model is trained from scratch.")
     parser.add_argument("-m", "--metrics-path", metavar="METRICS_PATH", default=None, help="Path to save additional performance metrics to (for debugging purposes).")
     args = parser.parse_args()
@@ -239,10 +239,10 @@ def main():
     tower_model = build_tower_cnn_model(input_shape)  # single input model
     triplet_model = build_triplet_model(input_shape, tower_model)  # siamese model
     if args.load_path is not None:
-    		triplet_model.load_weights(args.load_path)
+    	triplet_model.load_weights(args.load_path)
 
     # Setup callbacks for early stopping and model saving
-    callback_list = setup_callbacks(args.save_path)
+    callback_list = setup_callbacks(args.save_weights_path)
 
     # Compile model
     adam = Adam(lr=LEARNING_RATE)
@@ -258,11 +258,15 @@ def main():
     training_complete = True
 
     # Save weights
-    if args.save_path is not None:
-        triplet_model.save_weights(args.save_path + "final_weights.hdf5")
+    if args.save_weights_path is not None:
+        triplet_model.save_weights(args.save_weights_path + "final_weights.hdf5")
+
+    # Save model
+    if args.save_model_path is not None:
+        tower_model.save(args.save_model_path + "model.hdf5")
 
     # Plot PCA/TSNE
-    X, Y = utils.shuffle_data(X_train_anchors, y_train_anchors, one_hot_labels=True)
+    X, Y = utils.shuffle_data(X_valid_anchors, y_valid_anchors, one_hot_labels=True)
     X = X[:5000,:,:]
     Y = Y[:5000,:]
     X = tower_model.predict(X)
