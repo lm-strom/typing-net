@@ -16,8 +16,6 @@ from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 from sklearn.preprocessing import StandardScaler
 
-#import matplotlib.pyplot as plt    ////    Import done in function "plot_with_PCA" to stop matplotlib from launching early.
-
 from keras.models import Model
 from keras.layers import Dense, Input, Lambda
 from keras.layers import Conv1D, MaxPooling1D, Flatten
@@ -25,13 +23,10 @@ from keras.optimizers import Adam
 from keras.callbacks import Callback, ModelCheckpoint
 import keras.backend as K
 
-# import keras
-# from keras.layers import Sequential
-# from keras.layers import Activation
-# from keras.layers import SimpleRNN
-# from keras import initializers
-
 import utils
+
+# Constants
+PERIOD = 10
 
 # Parameters
 ALPHA = 1  # Triplet loss threshold
@@ -79,7 +74,7 @@ def setup_callbacks(save_path):
     callback_list.append(TerminateOnFlag())  # Terminate training if CTRL+C
 
     if save_path is not None:
-        model_checkpoint = ModelCheckpoint(save_path + "_class_model_{epoch:02d}_{val_loss:.2f}.hdf5", monitor="val_loss", save_best_only=True, verbose=1, period=50)  # Save model every 100 epochs
+        model_checkpoint = ModelCheckpoint(save_path + "_class_model_{epoch:02d}_{val_loss:.2f}.hdf5", monitor="val_loss", save_best_only=True, verbose=1, period=PERIOD)  # Save model every 100 epochs
         callback_list.append(model_checkpoint)
 
     return callback_list
@@ -270,12 +265,8 @@ def main():
     X = X[:5000,:,:]
     Y = Y[:5000,:]
     X = tower_model.predict(X)
-    plot_with_PCA(X, Y)
+    plot_with_TSNE(X, Y)
 
-
-    # This is how you can embed data using the trained model:
-
-    # embedding = tower_model.predict(X)
 
 
     # Other things that may be useful later:
