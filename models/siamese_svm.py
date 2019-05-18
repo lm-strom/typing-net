@@ -31,7 +31,7 @@ def main():
     args = parser.parse_args()
 
     #Load training triplets and validation triplets
-    X_train_anchors, y_train_anchors = utils.load_examples(args.triplets_path, "train_anchors")
+    X_train_anchors, _ = utils.load_examples(args.triplets_path, "train_anchors")
     X_train_positives, _ = utils.load_examples(args.triplets_path, "train_positives")
     X_train_negatives, _ = utils.load_examples(args.triplets_path, "train_negatives")
     X_valid_anchors, _ = utils.load_examples(args.triplets_path, "valid_anchors")
@@ -56,9 +56,9 @@ def main():
     y_valid = y_valid[perm]
 
     clf = svm.SVC(gamma='scale', verbose=True)
-    clf.fit(X_train[:50000,:], y_train[:50000])
+    clf.fit(X_train[:10000,:], y_train[:10000])
 
-    print("\n\nValidation error: " + str(np.sum(np.absolute(clf.predict(X_valid[:1000,:]) - y_valid[:1000]))/float(1000)))
+    print("\n\nValidation error: " + str(np.sum(np.absolute(clf.predict(X_valid[:10000,:]) - y_valid[:10000]))/float(10000)))
 
 
 if __name__ == "__main__":
