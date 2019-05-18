@@ -79,7 +79,7 @@ def setup_callbacks(save_path):
     callback_list.append(TerminateOnFlag())  # Terminate training if CTRL+C
 
     if save_path is not None:
-        model_checkpoint = ModelCheckpoint(save_path + "_class_model_{epoch:02d}_{val_loss:.2f}.hdf5", monitor="val_loss", save_best_only=True, verbose=1, period=50)  # Save model every 100 epochs
+        model_checkpoint = ModelCheckpoint(save_path + "_class_model_{epoch:02d}_{val_loss:.2f}.hdf5", monitor="val_loss", save_best_only=True, verbose=1, period=10) # Save model every 100 epochs
         callback_list.append(model_checkpoint)
 
     return callback_list
