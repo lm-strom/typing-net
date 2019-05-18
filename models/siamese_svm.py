@@ -42,7 +42,7 @@ def main():
     with CustomObjectScope({'_euclidean_distance': cnn_keras_siamese._euclidean_distance,
         'ALPHA': cnn_keras_siamese.ALPHA}):
         model = load_model(args.model_path)
-        model.compile(optimizer='adam', loss='mean_squared_error')
+        model.compile(optimizer='adam', loss='mean_squared_error') # Model was previously not compiled
 
     X_train, y_train = generateExamplesFromTriplets(model, X_train_anchors, X_train_positives, X_train_negatives)
     X_valid, y_valid = generateExamplesFromTriplets(model, X_valid_anchors, X_valid_positives, X_valid_negatives)
