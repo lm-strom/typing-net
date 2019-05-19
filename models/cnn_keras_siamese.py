@@ -181,10 +181,10 @@ def plot_with_TSNE(X_embedded, y):
     X_embedded = StandardScaler().fit_transform(X_embedded)
     X_embedded = tsne.fit_transform(X_embedded)
 
-    y = np.array(utils.one_hot_to_index(y))
+    y = list(np.array(utils.one_hot_to_index(y)))
 
     import matplotlib.pyplot as plt
-    plt.scatter(X_embedded[:,0], X_embedded[:,1], c=y)
+    plt.scatter(X_embedded[:,0], X_embedded[:,1], c=["C"+str(i) for i in y])
     plt.show()
 
 
@@ -263,7 +263,7 @@ def main():
         tower_model.save(args.save_model_path + "model.hdf5")
 
     # Plot PCA/TSNE
-    X, Y = utils.shuffle_data(X_train_anchors, y_train_anchors, one_hot_labels=True)
+    X, Y = utils.shuffle_data(X_valid_anchors[::750,:,:], y_valid_anchors[::750,:], one_hot_labels=True)
     X = X[:5000,:,:]
     Y = Y[:5000,:]
     X = tower_model.predict(X)
