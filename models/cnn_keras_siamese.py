@@ -19,6 +19,7 @@ from sklearn.preprocessing import StandardScaler
 from keras.models import Model
 from keras.layers import Dense, Input, Lambda
 from keras.layers import Conv1D, MaxPooling1D, Flatten
+from keras.layers.normalization import BatchNormalization
 from keras.optimizers import Adam
 from keras.callbacks import Callback, ModelCheckpoint
 import keras.backend as K
@@ -92,6 +93,7 @@ def build_tower_cnn_model(input_shape):
     x = x0
     for i in range(len(n_channels)):
         x = Conv1D(n_channels[i], kernel_size=kernel, strides=2, activation='relu', padding='same')(x)
+        x = BatchNormalization()(x)
         x = MaxPooling1D(5)(x)
 
     x = Flatten()(x)
