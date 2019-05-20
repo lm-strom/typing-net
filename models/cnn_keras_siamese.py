@@ -32,7 +32,7 @@ PERIOD = 10
 # Parameters
 ALPHA = 1  # Triplet loss threshold
 LEARNING_RATE = 1e-6
-EPOCHS = 1000
+EPOCHS = 10
 BATCH_SIZE = 50
 
 # Global variables
@@ -88,8 +88,8 @@ def build_tower_cnn_model(input_shape):
 
     x0 = Input(input_shape, name='Input')
 
-    kernel = 5
-    n_channels = [16]
+    kernel = 7
+    n_channels = [16, 16]
     x = x0
     for i in range(len(n_channels)):
         x = Conv1D(n_channels[i], kernel_size=kernel, strides=2, activation='relu', padding='same')(x)
