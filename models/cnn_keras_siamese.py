@@ -89,8 +89,8 @@ def build_tower_cnn_model(input_shape):
 
     x0 = Input(input_shape, name='Input')
 
-    kernel = 7
-    n_channels = [16, 16]
+    kernel = 5
+    n_channels = [16]
     x = x0
     for i in range(len(n_channels)):
         x = Conv1D(n_channels[i], kernel_size=kernel, strides=2, activation='relu', padding='same')(x)
@@ -167,7 +167,7 @@ def plot_with_PCA(X_embedded, y):
 
     import matplotlib.pyplot as plt
     plt.scatter(X_embedded[:, 0], X_embedded[:, 1], c=["C" + str(i) for i in y])
-    plt.show()
+    plt.savefig("PCA.png")
 
 
 def plot_with_TSNE(X_embedded, y):
@@ -186,7 +186,7 @@ def plot_with_TSNE(X_embedded, y):
 
     import matplotlib.pyplot as plt
     plt.scatter(X_embedded[:, 0], X_embedded[:, 1], c=["C" + str(i) for i in y])
-    plt.show()
+    plt.savefig("TSNE.png")
 
 
 def parse_args(args):
@@ -287,7 +287,7 @@ def main():
     # For now, read all the valid anchors to do PCA
     # TODO: add function in util that reads a specified number of random samples from a dataset.
     X_valid_anchors, y_valid_anchors = utils.load_examples(args.data_path, "valid_anchors")
-    X, Y = utils.shuffle_data(X_valid_anchors[::750, :, :], y_valid_anchors[::750, :], one_hot_labels=True)
+    X, Y = utils.shuffle_data(X_train_anchors[::750, :, :], y_train_anchors[::750, :], one_hot_labels=True)
     X = X[:5000, :, :]
     Y = Y[:5000, :]
     X = tower_model.predict(X)

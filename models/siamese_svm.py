@@ -59,10 +59,10 @@ def accuracy_FAR_FRR(y_true, y_pred):
         if y_true[i] == y_pred[i]:
             correct += 1
 
-        if y_true[i] == 0 and y_pred[i] == 1:
+        elif y_true[i] == 0 and y_pred[i] == 1:
             FAR_errors += 1
 
-        if y_true[i] == 1 and y_pred[i] == 0:
+        elif y_true[i] == 1 and y_pred[i] == 0:
             FRR_errors += 1
 
     accuracy = float(correct) / n_examples
@@ -153,6 +153,7 @@ def main():
     print("Accuracy = {}".format(accuracy))
     print("FAR = {}".format(FAR))
     print("FRR = {}".format(FRR))
+
 
 
 if __name__ == "__main__":
