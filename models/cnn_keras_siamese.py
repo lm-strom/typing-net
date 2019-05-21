@@ -63,6 +63,7 @@ def handler(signum, frame):
     else:
         exit()
 
+
 def setup_callbacks(save_path):
     """
     Sets up callbacks for early stopping and model saving.
@@ -75,7 +76,7 @@ def setup_callbacks(save_path):
     callback_list.append(TerminateOnFlag())  # Terminate training if CTRL+C
 
     if save_path is not None:
-        model_checkpoint = ModelCheckpoint(save_path + "_class_model_{epoch:02d}_{val_loss:.2f}.hdf5", monitor="val_loss", save_best_only=True, verbose=1, period=10) # Save model every 100 epochs
+        model_checkpoint = ModelCheckpoint(save_path + "_class_model_{epoch:02d}_{val_loss:.2f}.hdf5", monitor="val_loss", save_best_only=True, verbose=1, period=10)  # Save model every 100 epochs
         callback_list.append(model_checkpoint)
 
     return callback_list
@@ -88,8 +89,8 @@ def build_tower_cnn_model(input_shape):
 
     x0 = Input(input_shape, name='Input')
 
-    kernel = 7
-    n_channels = [16, 16]
+    kernel = 5
+    n_channels = [16]
     x = x0
     for i in range(len(n_channels)):
         x = Conv1D(n_channels[i], kernel_size=kernel, strides=2, activation='relu', padding='same')(x)
@@ -165,8 +166,8 @@ def plot_with_PCA(X_embedded, y):
     y = np.array(utils.one_hot_to_index(y))
 
     import matplotlib.pyplot as plt
-    plt.scatter(X_embedded[:,0], X_embedded[:,1], c=y)
-    plt.savefig("plot.png")
+    plt.scatter(X_embedded[:, 0], X_embedded[:, 1], c=["C" + str(i) for i in y])
+    plt.savefig("PCA.png")
 
 
 def plot_with_TSNE(X_embedded, y):
@@ -184,8 +185,8 @@ def plot_with_TSNE(X_embedded, y):
     y = np.array(utils.one_hot_to_index(y))
 
     import matplotlib.pyplot as plt
-    plt.scatter(X_embedded[:,0], X_embedded[:,1], c=y)
-    plt.savefig("plot.png")
+    plt.scatter(X_embedded[:, 0], X_embedded[:, 1], c=["C" + str(i) for i in y])
+    plt.savefig("TSNE.png")
 
 
 def parse_args(args):
@@ -209,34 +210,34 @@ def parse_args(args):
             else:
                 os.makedirs(args.metrics_path)
 
+    if args.read_batches is not False:
+        if args.read_batches.lower() in ("y", "yes", "1", "", "true", "t"):
+            args.read_batches = True
+        else:
+            args.read_batches = False
+
 
 def main():
 
-	# Parse arguments
+    # Parse arguments
     parser = argparse.ArgumentParser()
     parser.add_argument(dest="data_path", metavar="DATA_PATH", help="Path to read examples from.")
     parser.add_argument("-sW", "--save_weights_path", metavar="SAVE_WEIGHTS_PATH", default=None, help="Path to save trained weights to. If no path is specified checkpoints are not saved.")
     parser.add_argument("-sM", "--save_model_path", metavar="SAVE_MODEL_PATH", default=None, help="Path to save trained model to.")
     parser.add_argument("-l", "--load_path", metavar="LOAD_PATH", default=None, help="Path to load trained model from. If no path is specified model is trained from scratch.")
     parser.add_argument("-m", "--metrics-path", metavar="METRICS_PATH", default=None, help="Path to save additional performance metrics to (for debugging purposes).")
+    parser.add_argument("-b", "--read_batches", metavar="READ_BATCHES", default=False, help="If true, data is read incrementally in batches during training.")
     args = parser.parse_args()
     parse_args(args)
 
-
-    # Load training triplets and validation triplets
-    X_train_anchors, y_train_anchors = utils.load_examples(args.data_path, "train_anchors")
-    X_train_positives, _ = utils.load_examples(args.data_path, "train_positives")
-    X_train_negatives, _ = utils.load_examples(args.data_path, "train_negatives")
-    X_valid_anchors, y_valid_anchors = utils.load_examples(args.data_path, "valid_anchors")
-    X_valid_positives, _ = utils.load_examples(args.data_path, "valid_positives")
-    X_valid_negatives, _ = utils.load_examples(args.data_path, "valid_negatives")
+    X_shape, y_shape = utils.get_shapes(args.data_path, "train_anchors")
 
     # Build model
-    input_shape = X_train_anchors.shape[1:]
+    input_shape = X_shape[1:]
     tower_model = build_tower_cnn_model(input_shape)  # single input model
     triplet_model = build_triplet_model(input_shape, tower_model)  # siamese model
     if args.load_path is not None:
-    	triplet_model.load_weights(args.load_path)
+        triplet_model.load_weights(args.load_path)
 
     # Setup callbacks for early stopping and model saving
     callback_list = setup_callbacks(args.save_weights_path)
@@ -245,14 +246,34 @@ def main():
     adam = Adam(lr=LEARNING_RATE)
     triplet_model.compile(optimizer=adam, loss='mean_squared_error')
 
-    # Create dummy y = 0 (since output of siamese model is triplet loss)
-    y_train_dummy = np.zeros((X_train_anchors.shape[0],))
-    y_valid_dummy = np.zeros((X_valid_anchors.shape[0],))
+    if not args.read_batches:  # Read all data at once
 
-    # Train the model
-    triplet_model.fit([X_train_anchors, X_train_positives, X_train_negatives], y_train_dummy, validation_data=([X_valid_anchors, X_valid_positives, X_valid_negatives], y_valid_dummy), epochs=EPOCHS, batch_size=BATCH_SIZE, callbacks=callback_list)
-    global training_complete
-    training_complete = True
+        # Load training triplets and validation triplets
+        X_train_anchors, y_train_anchors = utils.load_examples(args.data_path, "train_anchors")
+        X_train_positives, _ = utils.load_examples(args.data_path, "train_positives")
+        X_train_negatives, _ = utils.load_examples(args.data_path, "train_negatives")
+        X_valid_anchors, y_valid_anchors = utils.load_examples(args.data_path, "valid_anchors")
+        X_valid_positives, _ = utils.load_examples(args.data_path, "valid_positives")
+        X_valid_negatives, _ = utils.load_examples(args.data_path, "valid_negatives")
+
+        # Create dummy y = 0 (since output of siamese model is triplet loss)
+        y_train_dummy = np.zeros((X_shape[0],))
+        y_valid_dummy = np.zeros((X_valid_anchors.shape[0],))
+
+        # Train the model
+        triplet_model.fit([X_train_anchors, X_train_positives, X_train_negatives],
+                          y_train_dummy, validation_data=([X_valid_anchors, X_valid_positives, X_valid_negatives], y_valid_dummy),
+                          epochs=EPOCHS, batch_size=BATCH_SIZE, callbacks=callback_list)
+        global training_complete
+        training_complete = True
+
+    else:  # Read data in batches
+
+        training_batch_generator = utils.DataGenerator(args.data_path, "train", batch_size=1000, shuffle=True)
+        validation_batch_generator = utils.DataGenerator(args.data_path, "valid", batch_size=1000, shuffle=True)
+
+        triplet_model.fit_generator(generator=training_batch_generator, validation_data=validation_batch_generator,
+                                    callbacks=callback_list, epochs=EPOCHS)
 
     # Save weights
     if args.save_weights_path is not None:
@@ -263,9 +284,12 @@ def main():
         tower_model.save(args.save_model_path + "model.hdf5")
 
     # Plot PCA/TSNE
-    X, Y = utils.shuffle_data(X_valid_anchors[::750,:,:], y_valid_anchors[::750,:], one_hot_labels=True)
-    X = X[:5000,:,:]
-    Y = Y[:5000,:]
+    # For now, read all the valid anchors to do PCA
+    # TODO: add function in util that reads a specified number of random samples from a dataset.
+    X_valid_anchors, y_valid_anchors = utils.load_examples(args.data_path, "valid_anchors")
+    X, Y = utils.shuffle_data(X_train_anchors[::750, :, :], y_train_anchors[::750, :], one_hot_labels=True)
+    X = X[:5000, :, :]
+    Y = Y[:5000, :]
     X = tower_model.predict(X)
     plot_with_PCA(X, Y)
 

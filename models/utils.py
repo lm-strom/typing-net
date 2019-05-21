@@ -3,6 +3,74 @@ import os
 import h5py
 
 import numpy as np
+import keras
+
+
+class DataGenerator(keras.utils.Sequence):
+    "Reads data iteratively as batches from h5f file"
+
+    def __init__(self, data_path, dataset_name, batch_size=32, shuffle=True, stop_after_batch=None):
+        "Initialization"
+
+        self.data_file = h5py.File(data_path, "r")
+        self.X_name = "X_" + dataset_name
+        self.y_name = "y_" + dataset_name
+
+        self.n_examples = self.data_file[self.X_name + "_anchors"].shape[0]
+        self.example_length = self.data_file[self.X_name + "_anchors"].shape[1]
+        self.n_features = self.data_file[self.X_name + "_anchors"].shape[2]
+        self.n_classes = self.data_file[self.y_name + "_anchors"].shape[1]
+
+        self.batch_size = batch_size
+        self.list_IDs = range(self.n_examples)
+        self.shuffle = shuffle
+        self.stop_after_batch = stop_after_batch
+
+        self.on_epoch_end()
+
+    def __len__(self):
+        "Denotes the number of batches per epoch"
+        if self.stop_after_batch is None:
+            return int(np.floor(len(self.list_IDs) / self.batch_size))
+        else:
+            return self.stop_after_batch
+
+    def __getitem__(self, index):
+        "Generate one batch of data"
+        # Generate indexes of the batch
+        indexes = self.indexes[index * self.batch_size: (index + 1) * self.batch_size]
+
+        # Find list of IDs
+        list_IDs_temp = [self.list_IDs[k] for k in indexes]
+
+        # Generate data
+        X, y = self.__data_generation(list_IDs_temp)
+
+        return X, y
+
+    def on_epoch_end(self):
+        "Updates indexes after each epoch"
+        self.indexes = np.arange(len(self.list_IDs))
+        if self.shuffle:
+            np.random.shuffle(self.indexes)
+
+    def __data_generation(self, list_IDs_temp):
+        "Generates data containing batch_size samples"  # X : (n_samples, *dim, n_channels)
+        # Initialization
+        X_anchors = np.empty((self.batch_size, self.example_length, self.n_features))
+        X_positives = np.empty((self.batch_size, self.example_length, self.n_features))
+        X_negatives = np.empty((self.batch_size, self.example_length, self.n_features))
+
+        # Generate data
+        for i, ID in enumerate(list_IDs_temp):
+            # Store sample
+            X_anchors[i, :, :] = self.data_file[self.X_name + "_anchors"][i, :, :]
+            X_positives[i, :, :] = self.data_file[self.X_name + "_positives"][i, :, :]
+            X_negatives[i, :, :] = self.data_file[self.X_name + "_negatives"][i, :, :]
+
+        y_dummy = np.zeros((self.batch_size,))
+
+        return [X_anchors, X_positives, X_negatives], y_dummy
 
 
 def load_examples(data_path, dataset_name):
@@ -31,6 +99,22 @@ def load_examples(data_path, dataset_name):
     y = data_file["y_" + dataset_name][()]
 
     return X, y
+
+
+def get_shapes(data_path, dataset_name):
+    """
+    Returns the shapes of the X and y stored in dataset
+    with name dataset_name in data_path.
+    """
+    if not os.path.isfile(data_path):
+        print("The file {} does not exist".format(data_path))
+        exit()
+
+    data_file = h5py.File(data_path, "r")
+    X_shape = data_file["X_" + dataset_name].shape
+    y_shape = data_file["y_" + dataset_name].shape
+
+    return X_shape, y_shape
 
 
 def load_examples_of_user(data_path, user_nr, set_type):
