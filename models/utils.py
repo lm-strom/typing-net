@@ -9,7 +9,7 @@ import keras
 class DataGenerator(keras.utils.Sequence):
     "Reads data iteratively as batches from h5f file"
 
-    def __init__(self, data_path, dataset_name, batch_size=32, shuffle=True):
+    def __init__(self, data_path, dataset_name, batch_size=32, shuffle=True, stop_after_batch=None):
         "Initialization"
 
         self.data_file = h5py.File(data_path, "r")
@@ -24,12 +24,16 @@ class DataGenerator(keras.utils.Sequence):
         self.batch_size = batch_size
         self.list_IDs = range(self.n_examples)
         self.shuffle = shuffle
+        self.stop_after_batch = stop_after_batch
 
         self.on_epoch_end()
 
     def __len__(self):
         "Denotes the number of batches per epoch"
-        return int(np.floor(len(self.list_IDs) / self.batch_size))
+        if self.stop_after_batch is None:
+            return int(np.floor(len(self.list_IDs) / self.batch_size))
+        else:
+            return self.stop_after_batch
 
     def __getitem__(self, index):
         "Generate one batch of data"
