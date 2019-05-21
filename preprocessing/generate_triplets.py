@@ -246,15 +246,15 @@ def main():
     # Generate additional examples for each set and save
     data_file.create_dataset("X_train_singles", data=X_train, maxshape=(None, args.example_length, FEATURE_LENGTH), dtype=float)
     data_file.create_dataset("y_train_singles", data=y_train, maxshape=(None, n_users), dtype=float)
-    #generate_examples_from_adjacents(X_train, y_train, "train_singles", data_file, args.step_size)
+    # generate_examples_from_adjacents(X_train, y_train, "train_singles", data_file, args.step_size)
 
     data_file.create_dataset("X_valid_singles", data=X_valid, maxshape=(None, args.example_length, FEATURE_LENGTH), dtype=float)
     data_file.create_dataset("y_valid_singles", data=y_valid, maxshape=(None, n_users), dtype=float)
-    #generate_examples_from_adjacents(X_valid, y_valid, "valid_singles", data_file, args.step_size)
+    # generate_examples_from_adjacents(X_valid, y_valid, "valid_singles", data_file, args.step_size)
 
     data_file.create_dataset("X_test", data=X_test, maxshape=(None, args.example_length, FEATURE_LENGTH), dtype=float)
     data_file.create_dataset("y_test", data=y_test, maxshape=(None, n_users), dtype=float)
-    #generate_examples_from_adjacents(X_test, y_test, "test", data_file, args.step_size)
+    # generate_examples_from_adjacents(X_test, y_test, "test", data_file, args.step_size)
 
     # Create datasets for triplet training data
     data_file.create_dataset("X_train_anchors", shape=(0, args.example_length, FEATURE_LENGTH),
@@ -272,6 +272,10 @@ def main():
     # Generate training triplets
     create_triplets("X_train_singles", "y_train_singles", output_name="train", data_file=data_file)
 
+    # Delete the train "singles"
+    del data_file["X_train_singles"]
+    del data_file["y_train_singles"]
+
     # Create datasets for triplet validation data
     data_file.create_dataset("X_valid_anchors", shape=(0, args.example_length, FEATURE_LENGTH),
                              maxshape=(None, args.example_length, FEATURE_LENGTH), dtype=float)
@@ -288,6 +292,10 @@ def main():
 
     # Generate validation triplets
     create_triplets("X_valid_singles", "y_valid_singles", output_name="valid", data_file=data_file)
+
+    # Delete the validation "singles"
+    del data_file["X_valid_singles"]
+    del data_file["y_valid_singles"]
 
     print("\nTriplet generation successful!")
     print("Datasets are saved in: {}".format(args.output_path + data_file_name))
