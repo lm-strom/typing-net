@@ -269,8 +269,8 @@ def main():
 
     else:  # Read data in batches
 
-        training_batch_generator = utils.DataGenerator(args.data_path, "train", batch_size=32, shuffle=True)
-        validation_batch_generator = utils.DataGenerator(args.data_path, "valid", batch_size=32, shuffle=True)
+        training_batch_generator = utils.DataGenerator(args.data_path, "train", batch_size=1000, shuffle=True)
+        validation_batch_generator = utils.DataGenerator(args.data_path, "valid", batch_size=1000, shuffle=True)
 
         triplet_model.fit_generator(generator=training_batch_generator, validation_data=validation_batch_generator,
                                     callbacks=callback_list, epochs=EPOCHS)
