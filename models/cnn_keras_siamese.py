@@ -227,6 +227,9 @@ def main():
     parser.add_argument("-l", "--load_path", metavar="LOAD_PATH", default=None, help="Path to load trained model from. If no path is specified model is trained from scratch.")
     parser.add_argument("-m", "--metrics-path", metavar="METRICS_PATH", default=None, help="Path to save additional performance metrics to (for debugging purposes).")
     parser.add_argument("-b", "--read_batches", metavar="READ_BATCHES", default=False, help="If true, data is read incrementally in batches during training.")
+    parser.add_argument("--PCA", metavar="PCA", default=False, help="If true, a PCA plot is saved.")
+    parser.add_argument("--TSNE", metavar="TSNE", default=False, help="If true, a TSNE plot is saved.")
+
     args = parser.parse_args()
     parse_args(args)
 
@@ -286,12 +289,16 @@ def main():
     # Plot PCA/TSNE
     # For now, read all the valid anchors to do PCA
     # TODO: add function in util that reads a specified number of random samples from a dataset.
-    X_valid_anchors, y_valid_anchors = utils.load_examples(args.data_path, "valid_anchors")
-    X, Y = utils.shuffle_data(X_train_anchors[::750, :, :], y_train_anchors[::750, :], one_hot_labels=True)
-    X = X[:5000, :, :]
-    Y = Y[:5000, :]
-    X = tower_model.predict(X)
-    plot_with_PCA(X, Y)
+    if args.PCA is not False or args.TSNE is not False:
+        X_valid_anchors, y_valid_anchors = utils.load_examples(args.data_path, "valid_anchors")
+        X, Y = utils.shuffle_data(X_train_anchors[::750, :, :], y_train_anchors[::750, :], one_hot_labels=True)
+        X = X[:5000, :, :]
+        Y = Y[:5000, :]
+        X = tower_model.predict(X)
+        if args.PCA:
+            plot_with_PCA(X, Y)
+        if args.TSNE:
+            plot_with_TSNE(X, Y)
 
 
 
