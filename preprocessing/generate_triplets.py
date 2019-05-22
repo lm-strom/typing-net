@@ -126,12 +126,12 @@ def create_triplets(X_data_name, y_data_name, output_name, data_file):
     example_length = data_file[X_data_name].shape[1]
     n_users = data_file[y_data_name].shape[1]
 
-    X_anchors = np.empty((0, example_length, FEATURE_LENGTH))
-    y_anchors = np.empty((0, n_users))
-    X_positives = np.empty((0, example_length, FEATURE_LENGTH))
-    y_positives = np.empty((0, n_users))
-    X_negatives = np.empty((0, example_length, FEATURE_LENGTH))
-    y_negatives = np.empty((0, n_users))
+    X_anchors = []
+    y_anchors = []
+    X_positives = []
+    y_positives = []
+    X_negatives = []
+    y_negatives = []
 
     X_anchors_name = "X_" + output_name + "_anchors"
     y_anchors_name = "y_" + output_name + "_anchors"
@@ -168,36 +168,36 @@ def create_triplets(X_data_name, y_data_name, output_name, data_file):
             negative_X = np.expand_dims(data_file[X_data_name][negative_choice, :, :], axis=0)
             negative_y = np.expand_dims(data_file[y_data_name][negative_choice, :], axis=0)
 
-            X_anchors = np.append(X_anchors, anchor_X, axis=0)
-            y_anchors = np.append(y_anchors, anchor_y, axis=0)
-            X_positives = np.append(X_positives, positive_X, axis=0)
-            y_positives = np.append(y_positives, positive_y, axis=0)
-            X_negatives = np.append(X_negatives, negative_X, axis=0)
-            y_negatives = np.append(y_negatives, negative_y, axis=0)
+            X_anchors.extend(anchor_X)
+            y_anchors.extend(anchor_y)
+            X_positives.extend(positive_X)
+            y_positives.extend(positive_y)
+            X_negatives.extend(negative_X)
+            y_negatives.extend(negative_y)
 
-        if X_anchors.shape[0] >= WRITE_CHUNK_SIZE or i == n_examples-1:
+        if len(X_anchors) >= WRITE_CHUNK_SIZE or i == n_examples-1:
 
-            data_file[X_anchors_name].resize(data_file[X_anchors_name].shape[0] + X_anchors.shape[0], axis=0)
-            data_file[X_anchors_name][-X_anchors.shape[0]:] = X_anchors
-            data_file[y_anchors_name].resize(data_file[y_anchors_name].shape[0] + y_anchors.shape[0], axis=0)
-            data_file[y_anchors_name][-y_anchors.shape[0]:] = y_anchors
+            data_file[X_anchors_name].resize(data_file[X_anchors_name].shape[0] + len(X_anchors), axis=0)
+            data_file[X_anchors_name][-len(X_anchors):] = np.asarray(X_anchors)
+            data_file[y_anchors_name].resize(data_file[y_anchors_name].shape[0] + len(y_anchors), axis=0)
+            data_file[y_anchors_name][-len(y_anchors):] = np.asarray(y_anchors)
 
-            data_file[X_positives_name].resize(data_file[X_positives_name].shape[0] + X_positives.shape[0], axis=0)
-            data_file[X_positives_name][-X_positives.shape[0]:] = X_positives
-            data_file[y_positives_name].resize(data_file[y_positives_name].shape[0] + y_positives.shape[0], axis=0)
-            data_file[y_positives_name][-y_positives.shape[0]:] = y_positives
+            data_file[X_positives_name].resize(data_file[X_positives_name].shape[0] + len(X_positives), axis=0)
+            data_file[X_positives_name][-len(X_positives):] = np.asarray(X_positives)
+            data_file[y_positives_name].resize(data_file[y_positives_name].shape[0] + len(y_positives), axis=0)
+            data_file[y_positives_name][-len(y_positives):] = np.asarray(y_positives)
 
-            data_file[X_negatives_name].resize(data_file[X_negatives_name].shape[0] + X_negatives.shape[0], axis=0)
-            data_file[X_negatives_name][-X_negatives.shape[0]:] = X_negatives
-            data_file[y_negatives_name].resize(data_file[y_negatives_name].shape[0] + y_negatives.shape[0], axis=0)
-            data_file[y_negatives_name][-y_negatives.shape[0]:] = y_negatives
+            data_file[X_negatives_name].resize(data_file[X_negatives_name].shape[0] + len(X_negatives), axis=0)
+            data_file[X_negatives_name][-len(X_negatives):] = np.asarray(X_negatives)
+            data_file[y_negatives_name].resize(data_file[y_negatives_name].shape[0] + len(y_negatives), axis=0)
+            data_file[y_negatives_name][-len(y_negatives):] = np.asarray(y_negatives)
 
-            X_anchors = np.empty((0, example_length, FEATURE_LENGTH))
-            y_anchors = np.empty((0, n_users))
-            X_positives = np.empty((0, example_length, FEATURE_LENGTH))
-            y_positives = np.empty((0, n_users))
-            X_negatives = np.empty((0, example_length, FEATURE_LENGTH))
-            y_negatives = np.empty((0, n_users))
+            X_anchors = []
+            y_anchors = []
+            X_positives = []
+            y_positives = []
+            X_negatives = []
+            y_negatives = []
 
 
 def main():
