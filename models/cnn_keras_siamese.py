@@ -76,7 +76,7 @@ def setup_callbacks(save_path):
     callback_list.append(TerminateOnFlag())  # Terminate training if CTRL+C
 
     if save_path is not None:
-        model_checkpoint = ModelCheckpoint(save_path + "_class_model_{epoch:02d}_{val_loss:.2f}.hdf5", monitor="val_loss", save_best_only=True, verbose=1, period=10)  # Save model every 100 epochs
+        model_checkpoint = ModelCheckpoint(save_path + "_class_model_{epoch:02d}_{val_loss:.2f}.hdf5", monitor="val_loss", save_best_only=True, verbose=1, period=10)  # Save model every 10 epochs
         callback_list.append(model_checkpoint)
 
     return callback_list
@@ -89,7 +89,7 @@ def build_tower_cnn_model(input_shape):
 
     x0 = Input(input_shape, name='Input')
 
-    kernel = 5
+    kernel = 9
     n_channels = [16]
     x = x0
     for i in range(len(n_channels)):
@@ -166,7 +166,7 @@ def plot_with_PCA(X_embedded, y):
     y = np.array(utils.one_hot_to_index(y))
 
     import matplotlib.pyplot as plt
-    plt.scatter(X_embedded[:, 0], X_embedded[:, 1], c=["C" + str(i) for i in y])
+    plt.scatter(X_embedded[:, 0], X_embedded[:, 1], c=y)
     plt.savefig("PCA.png")
 
 
@@ -185,7 +185,7 @@ def plot_with_TSNE(X_embedded, y):
     y = np.array(utils.one_hot_to_index(y))
 
     import matplotlib.pyplot as plt
-    plt.scatter(X_embedded[:, 0], X_embedded[:, 1], c=["C" + str(i) for i in y])
+    plt.scatter(X_embedded[:, 0], X_embedded[:, 1], c=y)
     plt.savefig("TSNE.png")
 
 
@@ -227,6 +227,9 @@ def main():
     parser.add_argument("-l", "--load_path", metavar="LOAD_PATH", default=None, help="Path to load trained model from. If no path is specified model is trained from scratch.")
     parser.add_argument("-m", "--metrics-path", metavar="METRICS_PATH", default=None, help="Path to save additional performance metrics to (for debugging purposes).")
     parser.add_argument("-b", "--read_batches", metavar="READ_BATCHES", default=False, help="If true, data is read incrementally in batches during training.")
+    parser.add_argument("--PCA", metavar="PCA", default=False, help="If true, a PCA plot is saved.")
+    parser.add_argument("--TSNE", metavar="TSNE", default=False, help="If true, a TSNE plot is saved.")
+
     args = parser.parse_args()
     parse_args(args)
 
@@ -286,12 +289,16 @@ def main():
     # Plot PCA/TSNE
     # For now, read all the valid anchors to do PCA
     # TODO: add function in util that reads a specified number of random samples from a dataset.
-    X_valid_anchors, y_valid_anchors = utils.load_examples(args.data_path, "valid_anchors")
-    X, Y = utils.shuffle_data(X_train_anchors[::750, :, :], y_train_anchors[::750, :], one_hot_labels=True)
-    X = X[:5000, :, :]
-    Y = Y[:5000, :]
-    X = tower_model.predict(X)
-    plot_with_PCA(X, Y)
+    if args.PCA is not False or args.TSNE is not False:
+        X_valid_anchors, y_valid_anchors = utils.load_examples(args.data_path, "valid_anchors")
+        X, Y = utils.shuffle_data(X_train_anchors[::750, :, :], y_train_anchors[::750, :], one_hot_labels=True)
+        X = X[:5000, :, :]
+        Y = Y[:5000, :]
+        X = tower_model.predict(X)
+        if args.PCA:
+            plot_with_PCA(X, Y)
+        if args.TSNE:
+            plot_with_TSNE(X, Y)
 
 
 
