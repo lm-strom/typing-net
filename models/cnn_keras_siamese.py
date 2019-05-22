@@ -76,7 +76,7 @@ def setup_callbacks(save_path):
     callback_list.append(TerminateOnFlag())  # Terminate training if CTRL+C
 
     if save_path is not None:
-        model_checkpoint = ModelCheckpoint(save_path + "_class_model_{epoch:02d}_{val_loss:.2f}.hdf5", monitor="val_loss", save_best_only=True, verbose=1, period=10)  # Save model every 100 epochs
+        model_checkpoint = ModelCheckpoint(save_path + "_class_model_{epoch:02d}_{val_loss:.2f}.hdf5", monitor="val_loss", save_best_only=True, verbose=1, period=10)  # Save model every 10 epochs
         callback_list.append(model_checkpoint)
 
     return callback_list
@@ -89,7 +89,7 @@ def build_tower_cnn_model(input_shape):
 
     x0 = Input(input_shape, name='Input')
 
-    kernel = 5
+    kernel = 9
     n_channels = [16]
     x = x0
     for i in range(len(n_channels)):
@@ -163,10 +163,10 @@ def plot_with_PCA(X_embedded, y):
     X_embedded = StandardScaler().fit_transform(X_embedded)
     X_embedded = pca.fit_transform(X_embedded)
 
-    y = list(np.array(utils.one_hot_to_index(y)))
+    y = np.array(utils.one_hot_to_index(y))
 
     import matplotlib.pyplot as plt
-    plt.scatter(X_embedded[:, 0], X_embedded[:, 1], c=["C" + str(i) for i in y])
+    plt.scatter(X_embedded[:, 0], X_embedded[:, 1], c=y)
     plt.savefig("PCA.png")
 
 
@@ -182,10 +182,10 @@ def plot_with_TSNE(X_embedded, y):
     X_embedded = StandardScaler().fit_transform(X_embedded)
     X_embedded = tsne.fit_transform(X_embedded)
 
-    y = list(np.array(utils.one_hot_to_index(y)))
+    y = np.array(utils.one_hot_to_index(y))
 
     import matplotlib.pyplot as plt
-    plt.scatter(X_embedded[:, 0], X_embedded[:, 1], c=["C" + str(i) for i in y])
+    plt.scatter(X_embedded[:, 0], X_embedded[:, 1], c=y)
     plt.savefig("TSNE.png")
 
 
