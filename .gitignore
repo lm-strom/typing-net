@@ -9,3 +9,4 @@ AWS
 __pycache__
 ._*.py
 *.DS_Store
+~$Results.xlsx
