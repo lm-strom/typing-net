@@ -32,7 +32,7 @@ PERIOD = 10
 # Parameters
 ALPHA = 1  # Triplet loss threshold
 LEARNING_RATE = 1e-6
-EPOCHS = 10
+EPOCHS = 100
 BATCH_SIZE = 64
 
 # Global variables
