@@ -9,7 +9,7 @@ import keras
 class DataGenerator(keras.utils.Sequence):
     "Reads data iteratively as batches from h5f file"
 
-    def __init__(self, data_path, dataset_name, batch_size=32, shuffle=True, stop_after_batch=None):
+    def __init__(self, data_path, dataset_name, batch_size=32, stop_after_batch=None):
         "Initialization"
 
         self.data_file = h5py.File(data_path, "r")
@@ -22,8 +22,7 @@ class DataGenerator(keras.utils.Sequence):
         self.n_classes = self.data_file[self.y_name + "_anchors"].shape[1]
 
         self.batch_size = batch_size
-        self.list_IDs = range(self.n_examples)
-        self.shuffle = shuffle
+        self.indexes = range(self.n_examples)
         self.stop_after_batch = stop_after_batch
 
         self.on_epoch_end()
@@ -31,7 +30,7 @@ class DataGenerator(keras.utils.Sequence):
     def __len__(self):
         "Denotes the number of batches per epoch"
         if self.stop_after_batch is None:
-            return int(np.floor(len(self.list_IDs) / self.batch_size))
+            return int(np.floor(self.n_examples / self.batch_size))
         else:
             return self.stop_after_batch
 
@@ -40,33 +39,21 @@ class DataGenerator(keras.utils.Sequence):
         # Generate indexes of the batch
         indexes = self.indexes[index * self.batch_size: (index + 1) * self.batch_size]
 
-        # Find list of IDs
-        list_IDs_temp = [self.list_IDs[k] for k in indexes]
-
         # Generate data
-        X, y = self.__data_generation(list_IDs_temp)
+        X, y = self.__data_generation(indexes)
 
         return X, y
 
     def on_epoch_end(self):
         "Updates indexes after each epoch"
-        self.indexes = np.arange(len(self.list_IDs))
-        if self.shuffle:
-            np.random.shuffle(self.indexes)
+        pass
 
-    def __data_generation(self, list_IDs_temp):
+    def __data_generation(self, indexes):
         "Generates data containing batch_size samples"  # X : (n_samples, *dim, n_channels)
-        # Initialization
-        X_anchors = np.empty((self.batch_size, self.example_length, self.n_features))
-        X_positives = np.empty((self.batch_size, self.example_length, self.n_features))
-        X_negatives = np.empty((self.batch_size, self.example_length, self.n_features))
 
-        # Generate data
-        for i, ID in enumerate(list_IDs_temp):
-            # Store sample
-            X_anchors[i, :, :] = self.data_file[self.X_name + "_anchors"][i, :, :]
-            X_positives[i, :, :] = self.data_file[self.X_name + "_positives"][i, :, :]
-            X_negatives[i, :, :] = self.data_file[self.X_name + "_negatives"][i, :, :]
+        X_anchors = self.data_file[self.X_name + "_anchors"][indexes[0]: indexes[-1] + 1, :, :]
+        X_positives = self.data_file[self.X_name + "_positives"][indexes[0]: indexes[-1] + 1, :, :]
+        X_negatives = self.data_file[self.X_name + "_negatives"][indexes[0]: indexes[-1] + 1, :, :]
 
         y_dummy = np.zeros((self.batch_size,))
 

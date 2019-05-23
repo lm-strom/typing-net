@@ -125,8 +125,8 @@ def main():
 
     else:  # Read data in batches
 
-        training_batch_generator = utils.DataGenerator(args.triplets_path, "train", batch_size=100, shuffle=True, stop_after_batch=10)
-        validation_batch_generator = utils.DataGenerator(args.triplets_path, "valid", batch_size=1000, shuffle=True)
+        training_batch_generator = utils.DataGenerator(args.triplets_path, "train", batch_size=100, stop_after_batch=10)
+        validation_batch_generator = utils.DataGenerator(args.triplets_path, "valid", batch_size=1000)
 
         # Get abs(distance) of embeddings (one batch at a time)
         X_train_1, X_train_0 = pair_distance_model.predict_generator(generator=training_batch_generator, verbose=1)
