@@ -291,7 +291,7 @@ def main():
     # TODO: add function in util that reads a specified number of random samples from a dataset.
     if args.PCA is not False or args.TSNE is not False:
         X_valid_anchors, y_valid_anchors = utils.load_examples(args.data_path, "valid_anchors")
-        X, Y = utils.shuffle_data(X_train_anchors[::750, :, :], y_train_anchors[::750, :], one_hot_labels=True)
+        X, Y = utils.shuffle_data(X_valid_anchors[::200, :, :], y_valid_anchors[::200, :], one_hot_labels=True)
         X = X[:5000, :, :]
         Y = Y[:5000, :]
         X = tower_model.predict(X)
