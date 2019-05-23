@@ -33,7 +33,7 @@ PERIOD = 10
 ALPHA = 1  # Triplet loss threshold
 LEARNING_RATE = 1e-6
 EPOCHS = 10
-BATCH_SIZE = 50
+BATCH_SIZE = 64
 
 # Global variables
 stop_flag = False  # Flag to indicate that training was terminated early
@@ -89,7 +89,7 @@ def build_tower_cnn_model(input_shape):
 
     x0 = Input(input_shape, name='Input')
 
-    kernel = 9
+    kernel = 7
     n_channels = [16]
     x = x0
     for i in range(len(n_channels)):
