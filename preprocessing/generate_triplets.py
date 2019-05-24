@@ -155,7 +155,7 @@ def create_triplets(X_data_name, y_data_name, output_name, data_file):
 
         positives_inds = user_ind_dict[utils.one_hot_to_index(anchor_y[0])]
 
-        for ii in range(750):
+        for ii in range(500):
             positive_choice = np.random.choice(positives_inds)
             positive_X = np.expand_dims(data_file[X_data_name][positive_choice, :, :], axis=0)
             positive_y = np.expand_dims(data_file[y_data_name][positive_choice, :, ], axis=0)
