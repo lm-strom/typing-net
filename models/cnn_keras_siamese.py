@@ -113,6 +113,18 @@ def _euclidean_distance(vects):
     return K.sqrt(K.maximum(K.sum(K.square(x - y), axis=1, keepdims=True), K.epsilon()))
 
 
+def _cosine_distance(vects):
+    x, y = vects
+    x = K.l2_normalize(x, axis=-1)
+    y = K.l2_normalize(y, axis=-1)
+    return -K.mean(x * y, axis=-1, keepdims=True)
+
+
+def _cos_dist_output_shape(shapes):
+    shape1, shape2 = shapes
+    return (shape1[0],1)
+
+
 def _eucl_dist_output_shape(shapes):
     """
     Wat?
@@ -126,7 +138,7 @@ def _triplet_distance(vects):
     Computes triplet loss for single triplet.
     """
     A, P, N = vects
-    return K.maximum(_euclidean_distance([A, P]) - _euclidean_distance([A, N]) + ALPHA, 0.0)
+    return K.maximum(_cosine_distance([A, P]) - _cosine_distance([A, N]) + ALPHA, 0.0)
 
 
 def build_triplet_model(input_shape, tower_model):
@@ -144,7 +156,7 @@ def build_triplet_model(input_shape, tower_model):
     x_B = tower_model(input_B)
     x_C = tower_model(input_C)
 
-    distance = Lambda(_triplet_distance, output_shape=_eucl_dist_output_shape)([x_A, x_B, x_C])
+    distance = Lambda(_triplet_distance, output_shape=_cos_dist_output_shape)([x_A, x_B, x_C])
 
     model = Model([input_A, input_B, input_C], distance, name='siamese')
 
