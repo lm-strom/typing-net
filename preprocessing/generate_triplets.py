@@ -10,6 +10,9 @@ assert os.getcwd().split("/")[-1] == "typing-net", "Preprocessing scripts must r
 sys.path.insert(0, 'models/')  # so that utils can be imported
 import utils
 
+from keras.utils import CustomObjectScope
+from keras.models import load_model, Model
+import cnn_keras_siamese
 
 # Constants
 FEATURE_LENGTH = 6
@@ -111,7 +114,7 @@ def generate_examples_from_adjacents(X, y, dataset_name, data_file, step_size=1)
             y_additional = np.empty((0, n_users))
 
 
-def create_triplets(X_data_name, y_data_name, output_name, data_file):
+def create_triplets(args, X_data_name, y_data_name, output_name, data_file, triplet_model=None):
     """
     Takes a dataset X, y stored in a hdf5 file and generates one triplet (A, P, N)
     for every example in X.
@@ -155,7 +158,8 @@ def create_triplets(X_data_name, y_data_name, output_name, data_file):
 
         positives_inds = user_ind_dict[utils.one_hot_to_index(anchor_y[0])]
 
-        for ii in range(500):
+        ii = 0
+        while ii < 500:
             positive_choice = np.random.choice(positives_inds)
             positive_X = np.expand_dims(data_file[X_data_name][positive_choice, :, :], axis=0)
             positive_y = np.expand_dims(data_file[y_data_name][positive_choice, :, ], axis=0)
@@ -168,12 +172,19 @@ def create_triplets(X_data_name, y_data_name, output_name, data_file):
             negative_X = np.expand_dims(data_file[X_data_name][negative_choice, :, :], axis=0)
             negative_y = np.expand_dims(data_file[y_data_name][negative_choice, :], axis=0)
 
+            if args.loss_thresh is not None and triplet_model is not None:
+                loss = triplet_model.predict([anchor_X, positive_X, negative_X])[0][0]
+                if loss < args.loss_thresh:
+                    continue
+
             X_anchors.extend(anchor_X)
             y_anchors.extend(anchor_y)
             X_positives.extend(positive_X)
             y_positives.extend(positive_y)
             X_negatives.extend(negative_X)
             y_negatives.extend(negative_y)
+
+            ii += 1
 
         if len(X_anchors) >= WRITE_CHUNK_SIZE or i == n_examples-1:
 
@@ -205,12 +216,14 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(dest="input_path", metavar="INPUT_PATH", help="Path to read preprocessed typing data from.")
     parser.add_argument(dest="output_path", metavar="OUTPUT_PATH", help="Path to write generated examples to.")
-    parser.add_argument("-e", "--example_length", metavar="EXAMPLE_LENGTH", type=int, default=18, help="Number of keystrokes to use as one data example.")
+    parser.add_argument("-e", "--example_length", metavar="EXAMPLE_LENGTH", type=int, default=100, help="Number of keystrokes to use as one data example.")
     parser.add_argument("-train", "--train_frac", metavar="TRAIN_FRAC", type=float, default=0.8, help="Fraction of examples to use to generate triplets to be used as training data.")
     parser.add_argument("-valid", "--valid_frac", metavar="VALID_FRAC", type=float, default=0.1, help="Fraction of examples to use to generate triplets to be used as validation data.")
     parser.add_argument("-test", "--test_frac", metavar="TEST_FRAC", type=float, default=0.1, help="Fraction of examples to use as test data (left as singles).")
     parser.add_argument("-s", "--step_size", metavar="STEP_SIZE", type=int, default=None,
                         help="Step size to use when generating additional examples. A step size s will yield (example_length - 1)//s additional examples per original example.")
+    parser.add_argument("-thresh", "--loss_thresh", metavar="LOSS_THRESH", type=float, default=None, help="Threshold which all triplet losses needs to be larger than")
+    parser.add_argument("--model_path", metavar="MODEL_PATH", type=str, default=None, help="Path to read model from.")
     args = parser.parse_args()
 
     # Check that input args are valid
@@ -270,7 +283,12 @@ def main():
     data_file.create_dataset("y_train_negatives", shape=(0, n_users), maxshape=(None, n_users), dtype=float)
 
     # Generate training triplets
-    create_triplets("X_train_singles", "y_train_singles", output_name="train", data_file=data_file)
+    if args.model_path is not None:
+        with CustomObjectScope({'_euclidean_distance': cnn_keras_siamese._euclidean_distance, 'ALPHA': cnn_keras_siamese.ALPHA}):
+            triplet_model = load_model(args.model_path)
+        create_triplets(args, "X_train_singles", "y_train_singles", output_name="train", data_file=data_file, triplet_model=triplet_model)
+    else:
+        create_triplets(args, "X_train_singles", "y_train_singles", output_name="train", data_file=data_file)
 
     # Delete the train "singles"
     del data_file["X_train_singles"]
@@ -291,7 +309,7 @@ def main():
     data_file.create_dataset("y_valid_negatives", shape=(0, n_users), maxshape=(None, n_users), dtype=float)
 
     # Generate validation triplets
-    create_triplets("X_valid_singles", "y_valid_singles", output_name="valid", data_file=data_file)
+    create_triplets(args, "X_valid_singles", "y_valid_singles", output_name="valid", data_file=data_file)
 
     # Delete the validation "singles"
     del data_file["X_valid_singles"]

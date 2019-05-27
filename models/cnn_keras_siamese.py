@@ -78,29 +78,6 @@ def setup_callbacks(save_path):
     return callback_list
 
 
-def build_tower_cnn_model(input_shape):
-    """
-    Builds a CNN-model for embedding single examples of data.
-    """
-
-    x0 = Input(input_shape, name='Input')
-
-    kernel = 7
-    n_channels = [16, 16]
-    x = x0
-    for i in range(len(n_channels)):
-        x = Conv1D(n_channels[i], kernel_size=kernel, strides=2, activation='relu', padding='same')(x)
-        x = BatchNormalization()(x)
-        x = MaxPooling1D(5)(x)
-
-    x = Flatten()(x)
-    y = Dense(40, name='dense_encoding')(x)
-
-    model = Model(inputs=x0, outputs=y)
-
-    return model
-
-
 def _euclidean_distance(vects):
     """
     Computes euclidean distance between tuple of vectors.
@@ -133,8 +110,32 @@ def _triplet_distance(vects):
     """
     Computes triplet loss for single triplet.
     """
+
     A, P, N = vects
-    return K.max(_euclidean_distance([A, P]) - _euclidean_distance([A, N]) + ALPHA, 0.0)
+    return K.maximum(_euclidean_distance([A, P]) - _euclidean_distance([A, N]) + ALPHA, 0.0)
+
+
+def build_tower_cnn_model(input_shape):
+    """
+    Builds a CNN-model for embedding single examples of data.
+    """
+
+    x0 = Input(input_shape, name='Input')
+
+    kernel = 7
+    n_channels = [16, 16]
+    x = x0
+    for i in range(len(n_channels)):
+        x = Conv1D(n_channels[i], kernel_size=kernel, strides=2, activation='relu', padding='same')(x)
+        x = BatchNormalization()(x)
+        x = MaxPooling1D(5)(x)
+
+    x = Flatten()(x)
+    y = Dense(40, name='dense_encoding')(x)
+
+    model = Model(inputs=x0, outputs=y)
+
+    return model
 
 
 def build_triplet_model(input_shape, tower_model):
@@ -152,7 +153,7 @@ def build_triplet_model(input_shape, tower_model):
     x_B = tower_model(input_B)
     x_C = tower_model(input_C)
 
-    distance = Lambda(_triplet_distance, output_shape=_cos_dist_output_shape)([x_A, x_B, x_C])
+    distance = Lambda(_triplet_distance, output_shape=_eucl_dist_output_shape)([x_A, x_B, x_C])
 
     model = Model([input_A, input_B, input_C], distance, name='siamese')
 
@@ -199,6 +200,7 @@ def main():
     parser.add_argument("-b", "--read_batches", metavar="READ_BATCHES", default=False, help="If true, data is read incrementally in batches during training.")
     parser.add_argument("--PCA", metavar="PCA", default=False, help="If true, a PCA plot is saved.")
     parser.add_argument("--TSNE", metavar="TSNE", default=False, help="If true, a TSNE plot is saved.")
+    parser.add_argument("--output_loss_threshold", metavar="OUTPUT_LOSS_THRESHOLD", default=None, help="Value between 0.0-1.0. Main function will return loss value of triplet at set percentage.")
 
     args = parser.parse_args()
     parse_args(args)
@@ -254,21 +256,45 @@ def main():
 
     # Save model
     if args.save_model_path is not None:
-        tower_model.save(args.save_model_path + "model.hdf5")
+        tower_model.save(args.save_model_path + "tower_model.hdf5")
+        triplet_model.save(args.save_model_path + "triplet_model.hdf5")
 
     # Plot PCA/TSNE
     # For now, read all the valid anchors to do PCA
     # TODO: add function in util that reads a specified number of random samples from a dataset.
     if args.PCA is not False or args.TSNE is not False:
         X_valid_anchors, y_valid_anchors = utils.load_examples(args.data_path, "valid_anchors")
-        X, Y = utils.shuffle_data(X_valid_anchors[::200, :, :], y_valid_anchors[::200, :], one_hot_labels=True)
+        X, Y = utils.shuffle_data(X_valid_anchors[:, :, :], y_valid_anchors[:, :], one_hot_labels=True)
         X = X[:5000, :, :]
         Y = Y[:5000, :]
         X = tower_model.predict(X)
         if args.PCA:
-            plot_with_PCA(X, Y)
+            utils.plot_with_PCA(X, Y)
         if args.TSNE:
-            plot_with_TSNE(X, Y)
+            utils.plot_with_TSNE(X, Y)
+
+    # Calculate loss value of triplet at a certain threshold
+    if args.output_loss_threshold is not None:
+        
+        if not args.read_batches:  # Read all data at once
+
+            # Load training triplets and validation triplets
+            X_train_anchors, _ = utils.load_examples(args.data_path, "train_anchors")
+            X_train_positives, _ = utils.load_examples(args.data_path, "train_positives")
+            X_train_negatives, _ = utils.load_examples(args.data_path, "train_negatives")
+
+            # Get abs(distance) of embeddings
+            X_train = triplet_model.predict([X_train_anchors, X_train_positives, X_train_negatives])
+
+        else:  # Read data in batches
+
+            training_batch_generator = utils.DataGenerator(args.data_path, "train", batch_size=100, stop_after_batch=10)
+
+            # Get abs(distance) of embeddings (one batch at a time)
+            X_train = triplet_model.predict_generator(generator=training_batch_generator, verbose=1)
+
+        X_train = np.sort(X_train, axis=None)
+        print(X_train[int(float(args.output_loss_threshold)*X_train.shape[0])])
 
 
 
