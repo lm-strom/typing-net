@@ -5,6 +5,10 @@ import h5py
 import numpy as np
 import keras
 
+from sklearn.decomposition import PCA
+from sklearn.manifold import TSNE
+from sklearn.preprocessing import StandardScaler
+
 
 class DataGenerator(keras.utils.Sequence):
     "Reads data iteratively as batches from h5f file"
@@ -214,6 +218,44 @@ def one_hot_to_index(y):
             indices.append(np.argmax(num))
 
     return indices
+
+
+def plot_with_PCA(X_embedded, y):
+    """
+    Applies PCA (with n_components=2) to X_embedded and plots
+    resulting (x_1, x_2) in 2D, with color indicating class.
+
+    Scikit-learn has PCA: https://scikit-learn.org/stable/modules/generated/sklearn.decomposition.PCA.html
+    """
+    pca = PCA(n_components=2)
+
+    X_embedded = StandardScaler().fit_transform(X_embedded)
+    X_embedded = pca.fit_transform(X_embedded)
+
+    y = np.array(utils.one_hot_to_index(y))
+
+    import matplotlib.pyplot as plt
+    plt.scatter(X_embedded[:, 0], X_embedded[:, 1], c=y)
+    plt.savefig("PCA.png")
+
+
+def plot_with_TSNE(X_embedded, y):
+    """
+    Applies t-SNE (with n_components=2) to X_embedded and plots
+    resulting (x_1, x_2) in 2D, with color indicating class.
+
+    Scikit-learn has t-SNE: https://scikit-learn.org/stable/modules/generated/sklearn.manifold.TSNE.html
+    """
+    tsne = TSNE(n_components=2, verbose=1)
+
+    X_embedded = StandardScaler().fit_transform(X_embedded)
+    X_embedded = tsne.fit_transform(X_embedded)
+
+    y = np.array(utils.one_hot_to_index(y))
+
+    import matplotlib.pyplot as plt
+    plt.scatter(X_embedded[:, 0], X_embedded[:, 1], c=y)
+    plt.savefig("TSNE.png")
 
 
 def split_per_user(X, y, train_frac, valid_frac, test_frac, shuffle=False):
