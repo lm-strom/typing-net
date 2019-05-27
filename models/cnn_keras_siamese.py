@@ -121,7 +121,7 @@ def _cosine_distance(vects):
 
 
 def _cos_dist_output_shape(shapes):
-    shape1, shape2 = shapes
+    shape1, shape2, shape3 = shapes
     return (shape1[0],1)
 
 
@@ -138,7 +138,7 @@ def _triplet_distance(vects):
     Computes triplet loss for single triplet.
     """
     A, P, N = vects
-    return K.maximum(_cosine_distance([A, P]) - _cosine_distance([A, N]) + ALPHA, 0.0)
+    return _cosine_distance([A, P]) - _cosine_distance([A, N])
 
 
 def build_triplet_model(input_shape, tower_model):
