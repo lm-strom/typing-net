@@ -32,7 +32,7 @@ PERIOD = 10
 ALPHA = 1  # Triplet loss threshold
 LEARNING_RATE = 3e-6
 EPOCHS = 1000
-BATCH_SIZE = 10
+BATCH_SIZE = 64
 
 # Global variables
 stop_flag = False  # Flag to indicate that training was terminated early
@@ -47,7 +47,7 @@ class OnlineTripletGenerator(keras.utils.Sequence):
     Code is adapted from: https://github.com/omoindrot/tensorflow-triplet-loss/blob/master/model/triplet_loss.py
     """
 
-    def __init__(self, data_path, dataset_name, tower_model, batch_size=300, alpha=ALPHA, random_triplets=False):
+    def __init__(self, data_path, dataset_name, tower_model, batch_size=300, alpha=ALPHA, triplet_mode="batch_all"):
         "Initialization"
 
         self.tower_model = tower_model
@@ -61,9 +61,12 @@ class OnlineTripletGenerator(keras.utils.Sequence):
         self.n_classes = self.data_file[self.y_name].shape[1]
 
         self.batch_size = batch_size
+        self.alpha = alpha
 
         self.indices = list(range(self.n_examples))
-        self.random_triplets = random_triplets
+
+        assert triplet_mode in ["batch_all", "batch_hard", "random"], "Invalid triplet mode. Choose between batch_all, batch_hard and random."
+        self.triplet_mode = triplet_mode
 
         self.on_epoch_end()
 
@@ -89,23 +92,26 @@ class OnlineTripletGenerator(keras.utils.Sequence):
         y_batch = self.data_file[self.y_name][y_boolean_mask].reshape((self.this_batch_size, self.n_classes))
         labels = np.array(utils.one_hot_to_index(y_batch))
 
-        if not self.random_triplets:
-
+        if self.triplet_mode == "batch_hard":
             # Compute the embeddings of this batch
             embeddings = self.tower_model.predict(X_batch)
-
             # Generate batch hard triplets
             anchor_inds, positive_inds, negative_inds = self._batch_hard_triplets(embeddings, labels)
 
-        else:
+        elif self.triplet_mode == "batch_all":
+            # Compute the embeddings of this batch
+            embeddings = self.tower_model.predict(X_batch)
+            # Generate batch hard triplets
+            anchor_inds, positive_inds, negative_inds = self._batch_all_triplets(embeddings, labels)
 
+        else:
             # Generate random triplets
             anchor_inds, positive_inds, negative_inds = self._random_triplets(labels)
 
         X_anchors = X_batch[anchor_inds, :, :]
         X_positives = X_batch[positive_inds, :, :]
         X_negatives = X_batch[negative_inds, :, :]
-        y_dummy = np.zeros((self.this_batch_size,))
+        y_dummy = np.zeros((len(anchor_inds),))
 
         return [X_anchors, X_positives, X_negatives], y_dummy
 
@@ -113,7 +119,7 @@ class OnlineTripletGenerator(keras.utils.Sequence):
         "Updates indexes after each epoch"
         random.shuffle(self.indices)
 
-    def _pairwise_distances(self, embeddings):
+    def _pairwise_distances(self, embeddings, squared=False):
         """
         Computes a 2D matrix of distances between all embeddings.
         """
@@ -129,6 +135,9 @@ class OnlineTripletGenerator(keras.utils.Sequence):
 
         # Replace any negative distances with zeros
         distances = np.maximum(distances, 0)
+
+        if not squared:
+            distances = np.sqrt(distances)
 
         return distances
 
@@ -164,6 +173,33 @@ class OnlineTripletGenerator(keras.utils.Sequence):
 
         return mask
 
+    def _triplet_mask(self, labels):
+        """
+        Returns a mask of shape (batch_size, batch_size, batch_size)
+        where mask[a, p, n] is True iff. (a, p, n) is a valid triplet.
+        """
+
+        # Check that a, p, n are distinct
+        indices_equal = np.eye(labels.shape[0])
+        indices_not_equal = np.logical_not(indices_equal)
+        a_not_equal_p = np.expand_dims(indices_not_equal, 2)
+        a_not_equal_n = np.expand_dims(indices_not_equal, 1)
+        p_not_equal_n = np.expand_dims(indices_not_equal, 0)
+
+        distinct_indices = np.logical_and(np.logical_and(a_not_equal_p, a_not_equal_n), p_not_equal_n)
+
+        # Check that a and p have the same label, a and n have different label
+        label_equal = np.equal(np.expand_dims(labels, 0), np.expand_dims(labels, 1))
+        a_equal_p = np.expand_dims(label_equal, 2)
+        a_equal_n = np.expand_dims(label_equal, 1)
+
+        valid_labels = np.logical_and(a_equal_p, np.logical_not(a_equal_n))
+
+        # Combine the masks
+        mask = np.logical_and(distinct_indices, valid_labels)
+
+        return mask
+
     def _batch_hard_triplets(self, embeddings, labels):
         """
         For each anchor, select the hardest positive and hardest negative
@@ -173,7 +209,7 @@ class OnlineTripletGenerator(keras.utils.Sequence):
         # Indices of anchors
         anchor_inds = range(self.this_batch_size)
 
-        pairwise_dists = self._pairwise_distances(embeddings)
+        pairwise_dists = self._pairwise_distances(embeddings, squared=True)
 
         # For each anchor, pick hardest positive
         mask_anchor_positive = self._anchor_positive_mask(labels)
@@ -193,6 +229,35 @@ class OnlineTripletGenerator(keras.utils.Sequence):
         max_dist = np.amax(pairwise_dists, axis=1, keepdims=True)
         anchor_negative_dists = pairwise_dists + max_dist * (1.0 - mask_anchor_negative)  # Add max dist to invalid negatives
         negative_inds = np.argmin(anchor_negative_dists, axis=1)  # Find hardest negatives
+
+        return anchor_inds, positive_inds, negative_inds
+
+    def _batch_all_triplets(self, embeddings, labels):
+        """
+        Select all semi-hard and hard triplets.
+        """
+
+        pairwise_dists = self._pairwise_distances(embeddings, squared=False)
+
+        anchor_positive_dists = np.expand_dims(pairwise_dists, 2)
+        anchor_negative_dists = np.expand_dims(pairwise_dists, 1)
+
+        triplet_loss = anchor_positive_dists - anchor_negative_dists + self.alpha
+
+        # Remove invalid triplets
+        mask = self._triplet_mask(labels)
+        triplet_loss = np.multiply(mask, triplet_loss)
+
+        # Set negative losses to zero
+        triplet_loss = np.maximum(triplet_loss, 0.0)
+
+        # Find triplets where loss > 0
+        anchor_inds, positive_inds, negative_inds = np.where((triplet_loss > 1e-16))  # & (triplet_loss <= 1))
+
+        # Convert to lists
+        anchor_inds = anchor_inds.tolist()
+        positive_inds = positive_inds.tolist()
+        negative_inds = negative_inds.tolist()
 
         return anchor_inds, positive_inds, negative_inds
 
@@ -287,7 +352,7 @@ def _cos_dist_output_shape(shapes):
 
 def _eucl_dist_output_shape(shapes):
     """
-    Wat?
+    Returns output shape of euclidean distance computation.
     """
     shape1, shape2, shape3 = shapes
     return (shape1[0], 1)
@@ -402,8 +467,8 @@ def main():
     tower_model.predict(np.zeros((1,) + input_shape))  # predict on some random data to activate predict()
 
     # Initializate online triplet generators
-    training_batch_generator = OnlineTripletGenerator(args.data_path, "train", tower_model, batch_size=BATCH_SIZE)
-    validation_batch_generator = OnlineTripletGenerator(args.data_path, "valid", tower_model, batch_size=BATCH_SIZE, random_triplets=True)
+    training_batch_generator = OnlineTripletGenerator(args.data_path, "train", tower_model, batch_size=BATCH_SIZE, triplet_mode="batch_all")
+    validation_batch_generator = OnlineTripletGenerator(args.data_path, "valid", tower_model, batch_size=BATCH_SIZE, triplet_mode="random")
 
     triplet_model.fit_generator(generator=training_batch_generator, validation_data=validation_batch_generator,
                                 callbacks=callback_list, epochs=EPOCHS)
