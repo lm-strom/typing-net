@@ -9,9 +9,12 @@ https://github.com/divyashan/time_series/blob/master/models/supervised/siamese_t
 import os
 import signal
 import argparse
+import random
 
 import numpy as np
+import h5py
 
+import keras
 from keras.models import Model
 from keras.layers import Dense, Input, Lambda
 from keras.layers import Conv1D, MaxPooling1D, Flatten
@@ -34,6 +37,150 @@ BATCH_SIZE = 64
 # Global variables
 stop_flag = False  # Flag to indicate that training was terminated early
 training_complete = False  # Flag to indicate that training is complete
+
+
+class OnlineTripletGenerator(keras.utils.Sequence):
+    """
+    Generates semi-hard triplets online by feeding random triplets through triplet_model,
+    keeping ones that are semi-hard. This is repeated until a full batch is generated, at which
+    point the full batch is returned.
+
+    Semi-hard: 0 <= loss <= ALPHA
+
+    Code is adapted from: https://omoindrot.github.io/triplet-loss
+    """
+
+    def __init__(self, data_path, dataset_name, tower_model, batch_size=300, alpha=ALPHA):
+        "Initialization"
+
+        self.tower_model = tower_model
+        self.data_file = h5py.File(data_path, "r")
+        self.X_name = "X_" + dataset_name
+        self.y_name = "y_" + dataset_name
+
+        self.n_examples = self.data_file[self.X_name].shape[0]
+        self.example_length = self.data_file[self.X_name].shape[1]
+        self.n_features = self.data_file[self.X_name].shape[2]
+        self.n_classes = self.data_file[self.y_name].shape[1]
+
+        self.batch_size = batch_size
+
+        self.indices = list(range(self.n_examples))
+
+        self.on_epoch_end()
+
+    def __len__(self):
+        "Denotes the number of batches per epoch"
+        return int(np.ceil(self.n_examples / self.batch_size))
+
+    def __getitem__(self, index):
+        "Generate one batch of data"
+
+        # Generate indexes of the batch
+        batch_indices = self.indices[index * self.batch_size: (index + 1) * self.batch_size]
+
+        self.this_batch_size = len(batch_indices)
+
+        # Load the raw examples
+        X_boolean_mask = np.zeros((self.n_examples, self.example_length, self.n_features), dtype=bool)
+        X_boolean_mask[batch_indices, :, :] = True
+        X_batch = self.data_file[self.X_name][X_boolean_mask].reshape((self.this_batch_size, self.example_length, self.n_features))
+        y_boolean_mask = np.zeros((self.n_examples, self.n_classes), dtype=bool)
+        y_boolean_mask[batch_indices, :] = True
+        y_batch = self.data_file[self.y_name][y_boolean_mask].reshape((self.this_batch_size, self.n_classes))
+
+        # Compute the embeddings of this batch
+        embeddings = self.tower_model.predict(X_batch)
+        labels = np.array(utils.one_hot_to_index(y_batch))
+
+        # Generate batch hard triplets
+        anchor_inds, positive_inds, negative_inds = self._batch_hard(embeddings, labels)
+
+        X_anchors = X_batch[anchor_inds, :, :]
+        X_positives = X_batch[positive_inds, :, :]
+        X_negatives = X_batch[negative_inds, :, :]
+        y_dummy = np.zeros((self.this_batch_size,))
+
+        return [X_anchors, X_positives, X_negatives], y_dummy
+
+    def on_epoch_end(self):
+        "Updates indexes after each epoch"
+        random.shuffle(self.indices)
+
+    def _pairwise_distances(self, embeddings):
+        """
+        Computes a 2D matrix of distances between all embeddings.
+        """
+
+        # Pairwise dot product between all embeddings
+        dot_products = np.matmul(embeddings, embeddings.T)
+
+        # Squared L2 norm for each embedding
+        square_norms = np.diagonal(dot_products)
+
+        # Pairwise distances
+        distances = np.expand_dims(square_norms, 0) - 2.0 * dot_products + np.expand_dims(square_norms, 0)
+
+        # Replace any negative distances with zeros
+        distances = np.maximum(distances, 0)
+
+        return distances
+
+    def _anchor_positive_mask(self, labels):
+        """
+        Returns a mask of shape (batch_size, batch_size)
+        where mask[a, p] is True iff. a and p are distinct
+        and have the same label.
+        """
+
+        # Check if a and p are distinct
+        indices_equal = np.eye(labels.shape[0])
+        indices_not_equal = np.logical_not(indices_equal)
+
+        # Check if labels[a] == labels[p]
+        labels_equal = np.equal(np.expand_dims(labels, 0), np.expand_dims(labels, 1))
+
+        # AND to get mask
+        mask = np.logical_and(indices_not_equal, labels_equal)
+
+        return mask
+
+    def _anchor_negative_mask(self, labels):
+        """
+        Returns a mask of shape (batch_size, batch_size)
+        where mask[a, n] is True iff. a and n have different labels.
+        """
+
+        # Check if labels[a] == labels[n]
+        labels_equal = np.equal(np.expand_dims(labels, 0), np.expand_dims(labels, 1))
+
+        mask = np.logical_not(labels_equal)
+
+        return mask
+
+    def _batch_hard(self, embeddings, labels):
+        """
+        For each anchor, select the hardest positive and hardest negative
+        within the batch. Yields batch_size triplets.
+        """
+
+        # Indices of anchors
+        anchor_inds = range(self.this_batch_size)
+
+        pairwise_dists = self._pairwise_distances(embeddings)
+
+        # For each anchor, pick hardest positive
+        mask_anchor_positive = self._anchor_positive_mask(labels)
+        anchor_positive_dists = np.multiply(mask_anchor_positive, pairwise_dists)  # Set 0 where (a, p) invalid
+        positive_inds = np.argmax(anchor_positive_dists, axis=1)  # Find hardest positives
+
+        # For each anchor, pick hardest negative
+        mask_anchor_negative = self._anchor_negative_mask(labels)
+        max_dist = np.amax(pairwise_dists, axis=1, keepdims=True)
+        anchor_negative_dists = pairwise_dists + max_dist * (1.0 - mask_anchor_negative)  # Add max dist to invalid negatives
+        negative_inds = np.argmin(anchor_negative_dists, axis=1)  # Find hardest negatives
+
+        return anchor_inds, positive_inds, negative_inds
 
 
 class TerminateOnFlag(Callback):
@@ -181,12 +328,6 @@ def parse_args(args):
             else:
                 os.makedirs(args.metrics_path)
 
-    if args.read_batches is not False:
-        if args.read_batches.lower() in ("y", "yes", "1", "", "true", "t"):
-            args.read_batches = True
-        else:
-            args.read_batches = False
-
 
 def main():
 
@@ -197,7 +338,6 @@ def main():
     parser.add_argument("-sM", "--save_model_path", metavar="SAVE_MODEL_PATH", default=None, help="Path to save trained model to.")
     parser.add_argument("-l", "--load_path", metavar="LOAD_PATH", default=None, help="Path to load trained model from. If no path is specified model is trained from scratch.")
     parser.add_argument("-m", "--metrics-path", metavar="METRICS_PATH", default=None, help="Path to save additional performance metrics to (for debugging purposes).")
-    parser.add_argument("-b", "--read_batches", metavar="READ_BATCHES", default=False, help="If true, data is read incrementally in batches during training.")
     parser.add_argument("--PCA", metavar="PCA", default=False, help="If true, a PCA plot is saved.")
     parser.add_argument("--TSNE", metavar="TSNE", default=False, help="If true, a TSNE plot is saved.")
     parser.add_argument("--output_loss_threshold", metavar="OUTPUT_LOSS_THRESHOLD", default=None, help="Value between 0.0-1.0. Main function will return loss value of triplet at set percentage.")
@@ -205,7 +345,7 @@ def main():
     args = parser.parse_args()
     parse_args(args)
 
-    X_shape, y_shape = utils.get_shapes(args.data_path, "train_anchors")
+    X_shape, y_shape = utils.get_shapes(args.data_path, "train")
 
     # Build model
     input_shape = X_shape[1:]
@@ -220,35 +360,14 @@ def main():
     # Compile model
     adam = Adam(lr=LEARNING_RATE)
     triplet_model.compile(optimizer=adam, loss='mean_squared_error')
+    tower_model.predict(np.zeros((1,) + input_shape))  # predict on some random data to activate predict()
 
-    if not args.read_batches:  # Read all data at once
+    # Initializate online triplet generators
+    training_batch_generator = OnlineTripletGenerator(args.data_path, "train", tower_model, batch_size=100)
+    validation_batch_generator = OnlineTripletGenerator(args.data_path, "valid", tower_model, batch_size=100)
 
-        # Load training triplets and validation triplets
-        X_train_anchors, y_train_anchors = utils.load_examples(args.data_path, "train_anchors")
-        X_train_positives, _ = utils.load_examples(args.data_path, "train_positives")
-        X_train_negatives, _ = utils.load_examples(args.data_path, "train_negatives")
-        X_valid_anchors, y_valid_anchors = utils.load_examples(args.data_path, "valid_anchors")
-        X_valid_positives, _ = utils.load_examples(args.data_path, "valid_positives")
-        X_valid_negatives, _ = utils.load_examples(args.data_path, "valid_negatives")
-
-        # Create dummy y = 0 (since output of siamese model is triplet loss)
-        y_train_dummy = np.zeros((X_shape[0],))
-        y_valid_dummy = np.zeros((X_valid_anchors.shape[0],))
-
-        # Train the model
-        triplet_model.fit([X_train_anchors, X_train_positives, X_train_negatives],
-                          y_train_dummy, validation_data=([X_valid_anchors, X_valid_positives, X_valid_negatives], y_valid_dummy),
-                          epochs=EPOCHS, batch_size=BATCH_SIZE, callbacks=callback_list)
-        global training_complete
-        training_complete = True
-
-    else:  # Read data in batches
-
-        training_batch_generator = utils.DataGenerator(args.data_path, "train", batch_size=1000)
-        validation_batch_generator = utils.DataGenerator(args.data_path, "valid", batch_size=1000)
-
-        triplet_model.fit_generator(generator=training_batch_generator, validation_data=validation_batch_generator,
-                                    callbacks=callback_list, epochs=EPOCHS)
+    triplet_model.fit_generator(generator=training_batch_generator, validation_data=validation_batch_generator,
+                                callbacks=callback_list, epochs=EPOCHS)
 
     # Save weights
     if args.save_weights_path is not None:
@@ -258,6 +377,8 @@ def main():
     if args.save_model_path is not None:
         tower_model.save(args.save_model_path + "tower_model.hdf5")
         triplet_model.save(args.save_model_path + "triplet_model.hdf5")
+
+    """
 
     # Plot PCA/TSNE
     # For now, read all the valid anchors to do PCA
@@ -296,7 +417,7 @@ def main():
         X_train = np.sort(X_train, axis=None)
         print(X_train[int(float(args.output_loss_threshold) * X_train.shape[0])])
 
-
+    """
 
     # Other things that may be useful later:
 

@@ -183,9 +183,11 @@ def parse_args(args):
         assert args.n_valid_users is None, "n_valid_users should not be specified in mode 'separated'."
 
     if args.mode == "joint":
-        data_file_name = str(args.n_valid_users) + "_users_joint_" + str(int(100*args.train_frac)) + "_" + str(int(100*args.valid_frac)) + "_" + str(int(100*args.test_frac)) + ".hdf5"
+        data_file_name = str(args.n_valid_users) + "_users_joint_" + str(int(100 * args.train_frac)) + "_" + str(int(100 * args.valid_frac)) + "_" + str(int(100 * args.test_frac)) + ".hdf5"
     elif args.mode == "separated":
-        data_file_name = str(n_users) + "_users_separated_" + str(int(100*args.train_frac)) + "_" + str(int(100*args.valid_frac)) + "_" + str(int(100*args.test_frac)) + ".hdf5"
+        data_file_name = str(n_users) + "_users_separated_" + str(int(100 * args.train_frac)) + "_" + str(int(100 * args.valid_frac)) + "_" + str(int(100 * args.test_frac)) + ".hdf5"
+    elif args.mode == "mixed":
+        data_file_name = str(n_users) + "_users_mixed_" + str(int(100 * args.train_frac)) + "_" + str(int(100 * args.valid_frac)) + "_" + str(int(100 * args.test_frac)) + ".hdf5"
 
     if os.path.isfile(args.output_path + data_file_name):
         response = input("Output directory contains identical dataset. Do you want to overwrite it? (Y/n) >> ")
@@ -200,8 +202,9 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(dest="input_path", metavar="INPUT_PATH", help="Path to read preprocessed typing data from.")
     parser.add_argument(dest="output_path", metavar="OUTPUT_PATH", help="Path to write generated examples to.")
-    parser.add_argument("-m", "--mode", metavar="MODE", choices=("joint", "separated"), default="joint",
-                        help="Determines if the datasets should be separated per user (sperated) or put in one joint dataset (joint). See code comments for details.")
+    parser.add_argument("-m", "--mode", metavar="MODE", choices=("joint", "separated", "mixed"), default="mixed",
+                        help="Determines if the datasets should be separated per user (separated), put in one joint dataset with only valid users in training set "
+                        "(joint) or put in joint dataset with data mixed (mixed). See code comments for details.")
     parser.add_argument("-e", "--example_length", metavar="EXAMPLE_LENGTH", type=int, default=18, help="Number of keystrokes to use as one data example.")
     parser.add_argument("-train", "--train_frac", metavar="TRAIN_FRAC", type=float, default=0.8, help="Fraction of examples to use as training data.")
     parser.add_argument("-valid", "--valid_frac", metavar="VALID_FRAC", type=float, default=0.1, help="Fraction of examples to use as validation data.")
@@ -269,6 +272,21 @@ def main():
         split_all_users("X_train_full", "y_train_full", "train", data_file, append_randoms=True)
         split_all_users("X_valid_full", "y_valid_full", "valid", data_file, append_randoms=True)
         split_all_users("X_test_full", "y_test_full", "test", data_file, append_randoms=True)
+
+    elif args.mode == "mixed":
+
+        # Split the data into train/valid/test
+        X_train, y_train, X_valid, y_valid, X_test, y_test = utils.split_per_user(X, y, train_frac=args.train_frac, valid_frac=args.valid_frac,
+                                                                                  test_frac=args.test_frac, shuffle=True)
+
+        data_file.create_dataset("X_train", data=X_train, maxshape=(None, args.example_length, FEATURE_LENGTH), dtype=float)
+        data_file.create_dataset("y_train", data=y_train, maxshape=(None, n_users), dtype=float)
+
+        data_file.create_dataset("X_valid", data=X_valid, maxshape=(None, args.example_length, FEATURE_LENGTH), dtype=float)
+        data_file.create_dataset("y_valid", data=y_valid, maxshape=(None, n_users), dtype=float)
+
+        data_file.create_dataset("X_test", data=X_test, maxshape=(None, args.example_length, FEATURE_LENGTH), dtype=float)
+        data_file.create_dataset("y_test", data=y_test, maxshape=(None, n_users), dtype=float)
 
     print("\nExample generation successful!")
     print("Datasets are saved in: {}".format(args.output_path + data_file_name))
