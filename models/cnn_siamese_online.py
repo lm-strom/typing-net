@@ -32,7 +32,7 @@ PERIOD = 10
 ALPHA = 1  # Triplet loss threshold
 LEARNING_RATE = 3e-6
 EPOCHS = 1000
-BATCH_SIZE = 1000
+BATCH_SIZE = 10
 
 # Global variables
 stop_flag = False  # Flag to indicate that training was terminated early
@@ -177,11 +177,19 @@ class OnlineTripletGenerator(keras.utils.Sequence):
 
         # For each anchor, pick hardest positive
         mask_anchor_positive = self._anchor_positive_mask(labels)
+
+        ind_cols = np.where(np.sum(mask_anchor_positive, axis=0) == 0)
+        mask_anchor_positive[0, ind_cols] = 1
+
         anchor_positive_dists = np.multiply(mask_anchor_positive, pairwise_dists)  # Set 0 where (a, p) invalid
         positive_inds = np.argmax(anchor_positive_dists, axis=1)  # Find hardest positives
 
         # For each anchor, pick hardest negative
         mask_anchor_negative = self._anchor_negative_mask(labels)
+
+        ind_cols = np.where(np.sum(mask_anchor_negative, axis=0) == 0)
+        mask_anchor_negative[0, ind_cols] = 1
+
         max_dist = np.amax(pairwise_dists, axis=1, keepdims=True)
         anchor_negative_dists = pairwise_dists + max_dist * (1.0 - mask_anchor_negative)  # Add max dist to invalid negatives
         negative_inds = np.argmin(anchor_negative_dists, axis=1)  # Find hardest negatives
@@ -198,10 +206,18 @@ class OnlineTripletGenerator(keras.utils.Sequence):
 
         # For each anchor, pick random positive
         mask_anchor_positive = self._anchor_positive_mask(labels)
+
+        ind_cols = np.where(np.sum(mask_anchor_positive, axis=0) == 0)
+        mask_anchor_positive[0, ind_cols] = 1
+
         positive_inds = np.array([random.choice(np.nonzero(mask_anchor_positive[:, i])[0]) for i in range(mask_anchor_positive.shape[1])])
 
         # For each anchor, pick random negative
         mask_anchor_negative = self._anchor_negative_mask(labels)
+
+        ind_cols = np.where(np.sum(mask_anchor_negative, axis=0) == 0)
+        mask_anchor_negative[0, ind_cols] = 1
+
         negative_inds = np.array([random.choice(np.nonzero(mask_anchor_negative[:, i])[0]) for i in range(mask_anchor_negative.shape[1])])
 
         return anchor_inds, positive_inds, negative_inds
