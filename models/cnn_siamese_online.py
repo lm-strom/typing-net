@@ -294,11 +294,11 @@ def build_tower_cnn_model(input_shape):
     x0 = Input(input_shape, name='Input')
 
     kernel = 7
-    n_channels = [16, 16]
+    n_channels = [24]
     x = x0
     for i in range(len(n_channels)):
         x = Conv1D(n_channels[i], kernel_size=kernel, strides=2, activation='relu', padding='same')(x)
-        x = BatchNormalization()(x)
+        # x = BatchNormalization()(x)
         x = MaxPooling1D(5)(x)
 
     x = Flatten()(x)
