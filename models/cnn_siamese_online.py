@@ -31,7 +31,7 @@ PERIOD = 10
 # Parameters
 ALPHA = 1  # Triplet loss threshold
 LEARNING_RATE = 3e-6
-EPOCHS = 100
+EPOCHS = 1000
 BATCH_SIZE = 64
 
 # Global variables
@@ -41,13 +41,10 @@ training_complete = False  # Flag to indicate that training is complete
 
 class OnlineTripletGenerator(keras.utils.Sequence):
     """
-    Generates semi-hard triplets online by feeding random triplets through triplet_model,
-    keeping ones that are semi-hard. This is repeated until a full batch is generated, at which
-    point the full batch is returned.
+    Generates batches of "batch hard" triplets with the method described here:
+    https://omoindrot.github.io/triplet-loss
 
-    Semi-hard: 0 <= loss <= ALPHA
-
-    Code is adapted from: https://omoindrot.github.io/triplet-loss
+    Code is adapted from: https://github.com/omoindrot/tensorflow-triplet-loss/blob/master/model/triplet_loss.py
     """
 
     def __init__(self, data_path, dataset_name, tower_model, batch_size=300, alpha=ALPHA):
@@ -340,7 +337,6 @@ def main():
     parser.add_argument("-m", "--metrics-path", metavar="METRICS_PATH", default=None, help="Path to save additional performance metrics to (for debugging purposes).")
     parser.add_argument("--PCA", metavar="PCA", default=False, help="If true, a PCA plot is saved.")
     parser.add_argument("--TSNE", metavar="TSNE", default=False, help="If true, a TSNE plot is saved.")
-    parser.add_argument("--output_loss_threshold", metavar="OUTPUT_LOSS_THRESHOLD", default=None, help="Value between 0.0-1.0. Main function will return loss value of triplet at set percentage.")
 
     args = parser.parse_args()
     parse_args(args)
@@ -363,8 +359,8 @@ def main():
     tower_model.predict(np.zeros((1,) + input_shape))  # predict on some random data to activate predict()
 
     # Initializate online triplet generators
-    training_batch_generator = OnlineTripletGenerator(args.data_path, "train", tower_model, batch_size=100)
-    validation_batch_generator = OnlineTripletGenerator(args.data_path, "valid", tower_model, batch_size=100)
+    training_batch_generator = OnlineTripletGenerator(args.data_path, "train", tower_model, batch_size=BATCH_SIZE)
+    validation_batch_generator = OnlineTripletGenerator(args.data_path, "valid", tower_model, batch_size=BATCH_SIZE)
 
     triplet_model.fit_generator(generator=training_batch_generator, validation_data=validation_batch_generator,
                                 callbacks=callback_list, epochs=EPOCHS)
@@ -378,14 +374,11 @@ def main():
         tower_model.save(args.save_model_path + "tower_model.hdf5")
         triplet_model.save(args.save_model_path + "triplet_model.hdf5")
 
-    """
-
     # Plot PCA/TSNE
-    # For now, read all the valid anchors to do PCA
     # TODO: add function in util that reads a specified number of random samples from a dataset.
     if args.PCA is not False or args.TSNE is not False:
-        X_valid_anchors, y_valid_anchors = utils.load_examples(args.data_path, "valid_anchors")
-        X, Y = utils.shuffle_data(X_valid_anchors[:, :, :], y_valid_anchors[:, :], one_hot_labels=True)
+        X_valid, y_valid = utils.load_examples(args.data_path, "valid")
+        X, Y = utils.shuffle_data(X_valid[:, :, :], y_valid[:, :], one_hot_labels=True)
         X = X[:5000, :, :]
         Y = Y[:5000, :]
         X = tower_model.predict(X)
@@ -393,39 +386,6 @@ def main():
             utils.plot_with_PCA(X, Y)
         if args.TSNE:
             utils.plot_with_TSNE(X, Y)
-
-    # Calculate loss value of triplet at a certain threshold
-    if args.output_loss_threshold is not None:
-
-        if not args.read_batches:  # Read all data at once
-
-            # Load training triplets and validation triplets
-            X_train_anchors, _ = utils.load_examples(args.data_path, "train_anchors")
-            X_train_positives, _ = utils.load_examples(args.data_path, "train_positives")
-            X_train_negatives, _ = utils.load_examples(args.data_path, "train_negatives")
-
-            # Get abs(distance) of embeddings
-            X_train = triplet_model.predict([X_train_anchors, X_train_positives, X_train_negatives])
-
-        else:  # Read data in batches
-
-            training_batch_generator = utils.DataGenerator(args.data_path, "train", batch_size=100, stop_after_batch=10)
-
-            # Get abs(distance) of embeddings (one batch at a time)
-            X_train = triplet_model.predict_generator(generator=training_batch_generator, verbose=1)
-
-        X_train = np.sort(X_train, axis=None)
-        print(X_train[int(float(args.output_loss_threshold) * X_train.shape[0])])
-
-    """
-
-    # Other things that may be useful later:
-
-    # Evaluation function found in util.py of the Jiffy git repo
-    # print(evaluate_test_embedding(train_embedding, y_train, test_embedding, y_test))
-
-    # Training using fit_generator (probably not necessary for us because data is limited)
-    # triplet_model.fit_generator(gen_batch(X_train, tr_trip_idxs, batch_size, dummy_y), epochs=1, steps_per_epoch=n_batches_per_epoch)
 
 
 if __name__ == "__main__":
