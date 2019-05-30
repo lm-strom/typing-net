@@ -30,7 +30,7 @@ PERIOD = 10
 
 # Parameters
 ALPHA = 1  # Triplet loss threshold
-LEARNING_RATE = 3e-6
+LEARNING_RATE = 1e-6
 EPOCHS = 1000
 BATCH_SIZE = 64
 
@@ -485,7 +485,7 @@ def main():
     # Plot PCA/TSNE
     # TODO: add function in util that reads a specified number of random samples from a dataset.
     if args.PCA is not False or args.TSNE is not False:
-        X_valid, y_valid = utils.load_examples(args.data_path, "valid")
+        X_valid, y_valid = utils.load_examples(args.data_path, "train")
         X, Y = utils.shuffle_data(X_valid[:, :, :], y_valid[:, :], one_hot_labels=True)
         X = X[:5000, :, :]
         Y = Y[:5000, :]
