@@ -32,7 +32,7 @@ PERIOD = 10
 ALPHA = 1  # Triplet loss threshold
 LEARNING_RATE = 3e-6
 EPOCHS = 1000
-BATCH_SIZE = 64
+BATCH_SIZE = 1000
 
 # Global variables
 stop_flag = False  # Flag to indicate that training was terminated early
@@ -47,7 +47,7 @@ class OnlineTripletGenerator(keras.utils.Sequence):
     Code is adapted from: https://github.com/omoindrot/tensorflow-triplet-loss/blob/master/model/triplet_loss.py
     """
 
-    def __init__(self, data_path, dataset_name, tower_model, batch_size=300, alpha=ALPHA):
+    def __init__(self, data_path, dataset_name, tower_model, batch_size=300, alpha=ALPHA, random_triplets=False):
         "Initialization"
 
         self.tower_model = tower_model
@@ -63,6 +63,7 @@ class OnlineTripletGenerator(keras.utils.Sequence):
         self.batch_size = batch_size
 
         self.indices = list(range(self.n_examples))
+        self.random_triplets = random_triplets
 
         self.on_epoch_end()
 
@@ -82,16 +83,24 @@ class OnlineTripletGenerator(keras.utils.Sequence):
         X_boolean_mask = np.zeros((self.n_examples, self.example_length, self.n_features), dtype=bool)
         X_boolean_mask[batch_indices, :, :] = True
         X_batch = self.data_file[self.X_name][X_boolean_mask].reshape((self.this_batch_size, self.example_length, self.n_features))
+
         y_boolean_mask = np.zeros((self.n_examples, self.n_classes), dtype=bool)
         y_boolean_mask[batch_indices, :] = True
         y_batch = self.data_file[self.y_name][y_boolean_mask].reshape((self.this_batch_size, self.n_classes))
-
-        # Compute the embeddings of this batch
-        embeddings = self.tower_model.predict(X_batch)
         labels = np.array(utils.one_hot_to_index(y_batch))
 
-        # Generate batch hard triplets
-        anchor_inds, positive_inds, negative_inds = self._batch_hard(embeddings, labels)
+        if not self.random_triplets:
+
+            # Compute the embeddings of this batch
+            embeddings = self.tower_model.predict(X_batch)
+
+            # Generate batch hard triplets
+            anchor_inds, positive_inds, negative_inds = self._batch_hard_triplets(embeddings, labels)
+
+        else:
+
+            # Generate random triplets
+            anchor_inds, positive_inds, negative_inds = self._random_triplets(labels)
 
         X_anchors = X_batch[anchor_inds, :, :]
         X_positives = X_batch[positive_inds, :, :]
@@ -155,7 +164,7 @@ class OnlineTripletGenerator(keras.utils.Sequence):
 
         return mask
 
-    def _batch_hard(self, embeddings, labels):
+    def _batch_hard_triplets(self, embeddings, labels):
         """
         For each anchor, select the hardest positive and hardest negative
         within the batch. Yields batch_size triplets.
@@ -176,6 +185,24 @@ class OnlineTripletGenerator(keras.utils.Sequence):
         max_dist = np.amax(pairwise_dists, axis=1, keepdims=True)
         anchor_negative_dists = pairwise_dists + max_dist * (1.0 - mask_anchor_negative)  # Add max dist to invalid negatives
         negative_inds = np.argmin(anchor_negative_dists, axis=1)  # Find hardest negatives
+
+        return anchor_inds, positive_inds, negative_inds
+
+    def _random_triplets(self, labels):
+        """
+        For each anchor, select a random positive and a random negative.
+        """
+
+        # Indices of anchors
+        anchor_inds = range(self.this_batch_size)
+
+        # For each anchor, pick random positive
+        mask_anchor_positive = self._anchor_positive_mask(labels)
+        positive_inds = np.array([random.choice(np.nonzero(mask_anchor_positive[:, i])[0]) for i in range(mask_anchor_positive.shape[1])])
+
+        # For each anchor, pick random negative
+        mask_anchor_negative = self._anchor_negative_mask(labels)
+        negative_inds = np.array([random.choice(np.nonzero(mask_anchor_negative[:, i])[0]) for i in range(mask_anchor_negative.shape[1])])
 
         return anchor_inds, positive_inds, negative_inds
 
@@ -360,7 +387,7 @@ def main():
 
     # Initializate online triplet generators
     training_batch_generator = OnlineTripletGenerator(args.data_path, "train", tower_model, batch_size=BATCH_SIZE)
-    validation_batch_generator = OnlineTripletGenerator(args.data_path, "valid", tower_model, batch_size=BATCH_SIZE)
+    validation_batch_generator = OnlineTripletGenerator(args.data_path, "valid", tower_model, batch_size=BATCH_SIZE, random_triplets=True)
 
     triplet_model.fit_generator(generator=training_batch_generator, validation_data=validation_batch_generator,
                                 callbacks=callback_list, epochs=EPOCHS)
