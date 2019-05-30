@@ -10,6 +10,7 @@ import h5py
 assert os.getcwd().split("/")[-1] == "typing-net", "Preprocessing scripts must run from typing-net/ directory."
 sys.path.insert(0, 'models/')  # so that utils can be imported
 import utils
+import generate_triplets
 
 # Constants
 FEATURE_LENGTH = 6
@@ -287,6 +288,27 @@ def main():
 
         data_file.create_dataset("X_test", data=X_test, maxshape=(None, args.example_length, FEATURE_LENGTH), dtype=float)
         data_file.create_dataset("y_test", data=y_test, maxshape=(None, n_users), dtype=float)
+
+        # Create datasets for triplet validation data
+        data_file.create_dataset("X_valid_anchors", shape=(0, args.example_length, FEATURE_LENGTH),
+                                 maxshape=(None, args.example_length, FEATURE_LENGTH), dtype=float)
+        data_file.create_dataset("y_valid_anchors", shape=(0, n_users), maxshape=(None, n_users), dtype=float)
+
+        data_file.create_dataset("X_valid_positives", shape=(0, args.example_length, FEATURE_LENGTH),
+                                 maxshape=(None, args.example_length, FEATURE_LENGTH), dtype=float)
+        data_file.create_dataset("y_valid_positives", shape=(0, n_users), maxshape=(None, n_users), dtype=float)
+
+        data_file.create_dataset("X_valid_negatives", shape=(0, args.example_length, FEATURE_LENGTH),
+                                 maxshape=(None, args.example_length, FEATURE_LENGTH), dtype=float)
+        data_file.create_dataset("y_valid_negatives", shape=(0, n_users), maxshape=(None, n_users), dtype=float)
+
+        # Generate validation triplets
+        args.loss_thresh = None
+        generate_triplets.create_triplets(args, "X_valid", "y_valid", output_name="valid", data_file=data_file)
+
+        # Delete the validation "singles"
+        del data_file["X_valid"]
+        del data_file["y_valid"]
 
     print("\nExample generation successful!")
     print("Datasets are saved in: {}".format(args.output_path + data_file_name))

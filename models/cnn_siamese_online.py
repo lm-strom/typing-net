@@ -468,7 +468,7 @@ def main():
 
     # Initializate online triplet generators
     training_batch_generator = OnlineTripletGenerator(args.data_path, "train", tower_model, batch_size=BATCH_SIZE, triplet_mode="batch_all")
-    validation_batch_generator = OnlineTripletGenerator(args.data_path, "valid", tower_model, batch_size=BATCH_SIZE, triplet_mode="random")
+    validation_batch_generator = utils.DataGenerator(args.data_path, "valid", batch_size=BATCH_SIZE)
 
     triplet_model.fit_generator(generator=training_batch_generator, validation_data=validation_batch_generator,
                                 callbacks=callback_list, epochs=EPOCHS)

@@ -159,7 +159,7 @@ def create_triplets(args, X_data_name, y_data_name, output_name, data_file, trip
         positives_inds = user_ind_dict[utils.one_hot_to_index(anchor_y[0])]
 
         ii = 0
-        while ii < 500:
+        while ii < 10:
             positive_choice = np.random.choice(positives_inds)
             positive_X = np.expand_dims(data_file[X_data_name][positive_choice, :, :], axis=0)
             positive_y = np.expand_dims(data_file[y_data_name][positive_choice, :, ], axis=0)
@@ -186,7 +186,7 @@ def create_triplets(args, X_data_name, y_data_name, output_name, data_file, trip
 
             ii += 1
 
-        if len(X_anchors) >= WRITE_CHUNK_SIZE or i == n_examples-1:
+        if len(X_anchors) >= WRITE_CHUNK_SIZE or i == n_examples - 1:
 
             data_file[X_anchors_name].resize(data_file[X_anchors_name].shape[0] + len(X_anchors), axis=0)
             data_file[X_anchors_name][-len(X_anchors):] = np.asarray(X_anchors)
@@ -239,7 +239,7 @@ def main():
         else:
             os.makedirs(args.output_path)
 
-    data_file_name = "triplets_" + str(int(100*args.train_frac)) + "_" + str(int(100*args.valid_frac)) + "_" + str(int(100*args.test_frac)) + ".hdf5"
+    data_file_name = "triplets_" + str(int(100 * args.train_frac)) + "_" + str(int(100 * args.valid_frac)) + "_" + str(int(100 * args.test_frac)) + ".hdf5"
 
     if os.path.isfile(args.output_path + data_file_name):
         response = input("Output directory contains identical dataset. Do you want to overwrite it? (Y/n) >> ")
