@@ -323,10 +323,6 @@ def main():
         # Generate validation triplets
         generate_triplets.create_triplets(args, "X_valid", "y_valid", output_name="valid", n_examples_per_anchor=10, data_file=data_file)
 
-        # Delete the validation "singles"
-        del data_file["X_valid"]
-        del data_file["y_valid"]
-
     print("\nExample generation successful!")
     print("Datasets are saved in: {}".format(args.output_path + data_file_name))
     print("Use h5py to read them.")
