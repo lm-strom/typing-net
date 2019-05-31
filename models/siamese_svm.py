@@ -9,7 +9,7 @@ from keras.utils import CustomObjectScope
 import keras.backend as K
 
 import utils
-import cnn_keras_siamese
+import cnn_siamese_online
 
 
 def build_pair_distance_model(tower_model, input_shape):
@@ -98,8 +98,8 @@ def main():
     parse_args(args)
 
     # Load model
-    with CustomObjectScope({'_euclidean_distance': cnn_keras_siamese._euclidean_distance,
-                            'ALPHA': cnn_keras_siamese.ALPHA}):
+    with CustomObjectScope({'_euclidean_distance': cnn_siamese_online._euclidean_distance,
+                            'ALPHA': cnn_siamese_online.ALPHA, "relu_clipped": cnn_siamese_online.relu_clipped}):
         tower_model = load_model(args.model_path)
         tower_model.compile(optimizer='adam', loss='mean_squared_error')  # Model was previously not compiled
 
@@ -147,8 +147,8 @@ def main():
     clf.fit(X_train[:10000, :], y_train[:10000])
 
     # Evaluate SVM
-    y_pred = clf.predict(X_valid)
-    accuracy, FAR, FRR = accuracy_FAR_FRR(y_valid, y_pred)
+    y_pred = clf.predict(X_train)
+    accuracy, FAR, FRR = accuracy_FAR_FRR(y_train, y_pred)
     print("\n\n---- Validation Results ----")
     print("Accuracy = {}".format(accuracy))
     print("FAR = {}".format(FAR))

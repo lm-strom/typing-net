@@ -17,8 +17,9 @@ import h5py
 
 import keras
 from keras.models import Model
-from keras.layers import Dense, Input, Lambda
+from keras.layers import Dense, Input, Lambda, Activation
 from keras.layers import Conv1D, MaxPooling1D, Flatten
+from keras.activations import relu
 from keras.layers.normalization import BatchNormalization
 from keras.optimizers import Adam
 from keras.callbacks import Callback, ModelCheckpoint, LearningRateScheduler
@@ -30,10 +31,10 @@ import utils
 PERIOD = 10
 
 # Parameters
-ALPHA = 1  # Triplet loss threshold
-LEARNING_RATE = 0.5e-4  # Start learning rate
+ALPHA = 5  # Triplet loss threshold
+LEARNING_RATE = 1e-4  # Start learning rate
 LR_DROP = 0.5  # Learning rate multiplier every LR_DROP_INTERVAL
-LR_DROP_INTERVAL = 50  # How many epochs to run before dropping learning rate
+LR_DROP_INTERVAL = 100000  # How many epochs to run before dropping learning rate
 EPOCHS = 1000
 BATCH_SIZE = 64
 
@@ -349,7 +350,11 @@ def _triplet_distance(vects):
     """
 
     A, P, N = vects
-    return K.maximum(_euclidean_distance([A, P]) - _euclidean_distance([A, N]) + ALPHA, 0.0)
+    return K.maximum(_euclidean_distance([A, P]) - 0.5 * _euclidean_distance([A, N]) + ALPHA, 0.0)
+
+
+def relu_clipped(x):
+    return relu(x, max_value=10000)
 
 
 def build_tower_cnn_model(input_shape):
@@ -358,17 +363,19 @@ def build_tower_cnn_model(input_shape):
     """
 
     x0 = Input(input_shape, name='Input')
-
+    
     kernel = 7
-    n_channels = [24]
+    n_channels = [32]
     x = x0
     for i in range(len(n_channels)):
-        x = Conv1D(n_channels[i], kernel_size=kernel, strides=2, activation='relu', padding='same')(x)
-        # x = BatchNormalization()(x)
+        x = Conv1D(n_channels[i], kernel_size=kernel, strides=2, padding='same')(x)
+        x = Activation(relu_clipped)(x)
+        if i == 0:
+            x = BatchNormalization()(x)
         x = MaxPooling1D(5)(x)
 
     x = Flatten()(x)
-    y = Dense(40, name='dense_encoding')(x)
+    y = Dense(80, name='dense_encoding')(x)
 
     model = Model(inputs=x0, outputs=y)
 
