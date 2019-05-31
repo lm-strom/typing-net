@@ -10,6 +10,7 @@ import os
 import signal
 import argparse
 import random
+import math
 
 import numpy as np
 import h5py
@@ -20,7 +21,7 @@ from keras.layers import Dense, Input, Lambda
 from keras.layers import Conv1D, MaxPooling1D, Flatten
 from keras.layers.normalization import BatchNormalization
 from keras.optimizers import Adam
-from keras.callbacks import Callback, ModelCheckpoint
+from keras.callbacks import Callback, ModelCheckpoint, LearningRateScheduler
 import keras.backend as K
 
 import utils
@@ -30,7 +31,9 @@ PERIOD = 10
 
 # Parameters
 ALPHA = 1  # Triplet loss threshold
-LEARNING_RATE = 0.5e-4
+LEARNING_RATE = 0.5e-4  # Start learning rate
+LR_DROP = 0.5  # Learning rate multiplier every LR_DROP_INTERVAL
+LR_DROP_INTERVAL = 50  # How many epochs to run before dropping learning rate
 EPOCHS = 1000
 BATCH_SIZE = 64
 
@@ -287,15 +290,27 @@ def setup_callbacks(save_path):
     Sets up callbacks for early stopping and model saving.
     """
 
-    signal.signal(signal.SIGINT, handler)
-
     callback_list = []
 
+    # Terminate on CTRL+C
+    signal.signal(signal.SIGINT, handler)
     callback_list.append(TerminateOnFlag())  # Terminate training if CTRL+C
 
+    # Save weights
     if save_path is not None:
         model_checkpoint = ModelCheckpoint(save_path + "_class_model_{epoch:02d}_{val_loss:.2f}.hdf5", monitor="val_loss", save_best_only=True, verbose=1, period=10)  # Save model every 10 epochs
         callback_list.append(model_checkpoint)
+
+    # Learning rate scheduler
+    def step_decay(epoch):
+        initial_lrate = LEARNING_RATE
+        drop = LR_DROP
+        epochs_drop = LR_DROP_INTERVAL
+        lrate = initial_lrate * math.pow(drop, math.floor((1 + epoch) / epochs_drop))
+        return lrate
+
+    lr_scheduler = LearningRateScheduler(step_decay, verbose=1)
+    callback_list.append(lr_scheduler)
 
     return callback_list
 
