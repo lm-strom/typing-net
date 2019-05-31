@@ -232,10 +232,15 @@ def plot_with_PCA(X_embedded, y):
     X_embedded = StandardScaler().fit_transform(X_embedded)
     X_embedded = pca.fit_transform(X_embedded)
 
+    n_classes = y.shape[1]
     y = np.array(one_hot_to_index(y))
 
     import matplotlib.pyplot as plt
-    plt.scatter(X_embedded[:, 0], X_embedded[:, 1], c=y)
+    import matplotlib.cm as cm
+
+    colors = cm.rainbow(np.linspace(0, 1, n_classes))
+
+    plt.scatter(X_embedded[:, 0], X_embedded[:, 1], c=colors[y])
     plt.savefig("PCA.png")
 
 
@@ -251,10 +256,15 @@ def plot_with_TSNE(X_embedded, y):
     X_embedded = StandardScaler().fit_transform(X_embedded)
     X_embedded = tsne.fit_transform(X_embedded)
 
+    n_classes = y.shape[1]
     y = np.array(one_hot_to_index(y))
 
     import matplotlib.pyplot as plt
-    plt.scatter(X_embedded[:, 0], X_embedded[:, 1], c=y)
+    import matplotlib.cm as cm
+
+    colors = cm.rainbow(np.linspace(0, 1, n_classes))
+
+    plt.scatter(X_embedded[:, 0], X_embedded[:, 1], c=colors[y])
     plt.savefig("TSNE.png")
 
 
