@@ -69,7 +69,7 @@ class OnlineTripletGenerator(keras.utils.Sequence):
 
         self.indices = list(range(self.n_examples))
 
-        assert triplet_mode in ["batch_all", "batch_hard", "random"], "Invalid triplet mode. Choose between batch_all and batch_hard."
+        assert triplet_mode in ["batch_all", "batch_hard"], "Invalid triplet mode. Choose between batch_all and batch_hard."
         self.triplet_mode = triplet_mode
 
         self.on_epoch_end()
@@ -295,7 +295,7 @@ def setup_callbacks(save_path):
 
     # Terminate on CTRL+C
     signal.signal(signal.SIGINT, handler)
-    callback_list.append(TerminateOnFlag())  # Terminate training if CTRL+C
+    callback_list.append(TerminateOnFlag())
 
     # Save weights
     if save_path is not None:
