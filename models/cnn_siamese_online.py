@@ -33,7 +33,7 @@ PERIOD = 10
 ALPHA = 1  # Triplet loss threshold
 LEARNING_RATE = 0.5e-4  # Start learning rate
 LR_DROP = 0.5  # Learning rate multiplier every LR_DROP_INTERVAL
-LR_DROP_INTERVAL = 50  # How many epochs to run before dropping learning rate
+LR_DROP_INTERVAL = 100  # How many epochs to run before dropping learning rate
 EPOCHS = 1000
 BATCH_SIZE = 64
 
@@ -68,7 +68,7 @@ class OnlineTripletGenerator(keras.utils.Sequence):
 
         self.indices = list(range(self.n_examples))
 
-        assert triplet_mode in ["batch_all", "batch_hard", "random"], "Invalid triplet mode. Choose between batch_all and batch_hard."
+        assert triplet_mode in ["batch_all", "batch_hard"], "Invalid triplet mode. Choose between batch_all and batch_hard."
         self.triplet_mode = triplet_mode
 
         self.on_epoch_end()
@@ -294,7 +294,7 @@ def setup_callbacks(save_path):
 
     # Terminate on CTRL+C
     signal.signal(signal.SIGINT, handler)
-    callback_list.append(TerminateOnFlag())  # Terminate training if CTRL+C
+    callback_list.append(TerminateOnFlag())
 
     # Save weights
     if save_path is not None:
@@ -364,7 +364,7 @@ def build_tower_cnn_model(input_shape):
     x = x0
     for i in range(len(n_channels)):
         x = Conv1D(n_channels[i], kernel_size=kernel, strides=2, activation='relu', padding='same')(x)
-        # x = BatchNormalization()(x)
+        x = BatchNormalization()(x)
         x = MaxPooling1D(5)(x)
 
     x = Flatten()(x)

@@ -26,7 +26,7 @@ class DataGenerator(keras.utils.Sequence):
         self.n_classes = self.data_file[self.y_name + "_anchors"].shape[1]
 
         self.batch_size = batch_size
-        self.indexes = range(self.n_examples)
+        self.indices = list(range(self.n_examples))
         self.stop_after_batch = stop_after_batch
 
         self.on_epoch_end()
@@ -41,25 +41,28 @@ class DataGenerator(keras.utils.Sequence):
     def __getitem__(self, index):
         "Generate one batch of data"
         # Generate indexes of the batch
-        indexes = self.indexes[index * self.batch_size: (index + 1) * self.batch_size]
+        indices = self.indices[index * self.batch_size: (index + 1) * self.batch_size]
+        self.this_batch_size = len(indices)
 
         # Generate data
-        X, y = self.__data_generation(indexes)
+        X, y = self.__data_generation(indices)
 
         return X, y
 
     def on_epoch_end(self):
         "Updates indexes after each epoch"
-        pass
+        random.shuffle(self.indices)
 
-    def __data_generation(self, indexes):
+    def __data_generation(self, indices):
         "Generates data containing batch_size samples"  # X : (n_samples, *dim, n_channels)
 
-        X_anchors = self.data_file[self.X_name + "_anchors"][indexes[0]: indexes[-1] + 1, :, :]
-        X_positives = self.data_file[self.X_name + "_positives"][indexes[0]: indexes[-1] + 1, :, :]
-        X_negatives = self.data_file[self.X_name + "_negatives"][indexes[0]: indexes[-1] + 1, :, :]
+        X_boolean_mask = np.zeros((self.n_examples, self.example_length, self.n_features), dtype=bool)
+        X_boolean_mask[indices, :, :] = True
+        X_anchors = self.data_file[self.X_name + "_anchors"][X_boolean_mask].reshape((self.this_batch_size, self.example_length, self.n_features))
+        X_positives = self.data_file[self.X_name + "_positives"][X_boolean_mask].reshape((self.this_batch_size, self.example_length, self.n_features))
+        X_negatives = self.data_file[self.X_name + "_negatives"][X_boolean_mask].reshape((self.this_batch_size, self.example_length, self.n_features))
 
-        y_dummy = np.zeros((self.batch_size,))
+        y_dummy = np.zeros((self.this_batch_size,))
 
         return [X_anchors, X_positives, X_negatives], y_dummy
 
