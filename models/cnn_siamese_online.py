@@ -32,9 +32,9 @@ PERIOD = 10
 
 # Parameters
 ALPHA = 5  # Triplet loss threshold
-LEARNING_RATE = 1e-4  # Start learning rate
-LR_DROP = 0.5  # Learning rate multiplier every LR_DROP_INTERVAL
-LR_DROP_INTERVAL = 100000  # How many epochs to run before dropping learning rate
+LEARNING_RATE = 0.3e-5  # Start learning rate
+LR_DROP = 0.8  # Learning rate multiplier every LR_DROP_INTERVAL
+LR_DROP_INTERVAL = 5  # How many epochs to run before dropping learning rate
 EPOCHS = 1000
 BATCH_SIZE = 64
 
@@ -368,8 +368,8 @@ def build_tower_cnn_model(input_shape):
     n_channels = [32]
     x = x0
     for i in range(len(n_channels)):
-        x = Conv1D(n_channels[i], kernel_size=kernel, strides=2, padding='same')(x)
-        x = Activation(relu_clipped)(x)
+        x = Conv1D(n_channels[i], kernel_size=kernel, strides=2, activation="relu", padding='same')(x)
+        # x = Activation(relu_clipped)(x)
         if i == 0:
             x = BatchNormalization()(x)
         x = MaxPooling1D(5)(x)
