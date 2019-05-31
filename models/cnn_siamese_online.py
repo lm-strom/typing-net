@@ -30,7 +30,7 @@ PERIOD = 10
 
 # Parameters
 ALPHA = 1  # Triplet loss threshold
-LEARNING_RATE = 1e-6
+LEARNING_RATE = 0.5e-4
 EPOCHS = 1000
 BATCH_SIZE = 64
 
@@ -65,7 +65,7 @@ class OnlineTripletGenerator(keras.utils.Sequence):
 
         self.indices = list(range(self.n_examples))
 
-        assert triplet_mode in ["batch_all", "batch_hard", "random"], "Invalid triplet mode. Choose between batch_all, batch_hard and random."
+        assert triplet_mode in ["batch_all", "batch_hard", "random"], "Invalid triplet mode. Choose between batch_all and batch_hard."
         self.triplet_mode = triplet_mode
 
         self.on_epoch_end()
@@ -103,10 +103,6 @@ class OnlineTripletGenerator(keras.utils.Sequence):
             embeddings = self.tower_model.predict(X_batch)
             # Generate batch hard triplets
             anchor_inds, positive_inds, negative_inds = self._batch_all_triplets(embeddings, labels)
-
-        else:
-            # Generate random triplets
-            anchor_inds, positive_inds, negative_inds = self._random_triplets(labels)
 
         X_anchors = X_batch[anchor_inds, :, :]
         X_positives = X_batch[positive_inds, :, :]
@@ -258,32 +254,6 @@ class OnlineTripletGenerator(keras.utils.Sequence):
         anchor_inds = anchor_inds.tolist()
         positive_inds = positive_inds.tolist()
         negative_inds = negative_inds.tolist()
-
-        return anchor_inds, positive_inds, negative_inds
-
-    def _random_triplets(self, labels):
-        """
-        For each anchor, select a random positive and a random negative.
-        """
-
-        # Indices of anchors
-        anchor_inds = range(self.this_batch_size)
-
-        # For each anchor, pick random positive
-        mask_anchor_positive = self._anchor_positive_mask(labels)
-
-        ind_cols = np.where(np.sum(mask_anchor_positive, axis=0) == 0)
-        mask_anchor_positive[0, ind_cols] = 1
-
-        positive_inds = np.array([random.choice(np.nonzero(mask_anchor_positive[:, i])[0]) for i in range(mask_anchor_positive.shape[1])])
-
-        # For each anchor, pick random negative
-        mask_anchor_negative = self._anchor_negative_mask(labels)
-
-        ind_cols = np.where(np.sum(mask_anchor_negative, axis=0) == 0)
-        mask_anchor_negative[0, ind_cols] = 1
-
-        negative_inds = np.array([random.choice(np.nonzero(mask_anchor_negative[:, i])[0]) for i in range(mask_anchor_negative.shape[1])])
 
         return anchor_inds, positive_inds, negative_inds
 

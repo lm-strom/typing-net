@@ -114,7 +114,7 @@ def generate_examples_from_adjacents(X, y, dataset_name, data_file, step_size=1)
             y_additional = np.empty((0, n_users))
 
 
-def create_triplets(args, X_data_name, y_data_name, output_name, data_file, triplet_model=None):
+def create_triplets(args, X_data_name, y_data_name, output_name, data_file, n_examples_per_anchor, triplet_model=None):
     """
     Takes a dataset X, y stored in a hdf5 file and generates one triplet (A, P, N)
     for every example in X.
@@ -159,7 +159,7 @@ def create_triplets(args, X_data_name, y_data_name, output_name, data_file, trip
         positives_inds = user_ind_dict[utils.one_hot_to_index(anchor_y[0])]
 
         ii = 0
-        while ii < 10:
+        while ii < n_examples_per_anchor:
             positive_choice = np.random.choice(positives_inds)
             positive_X = np.expand_dims(data_file[X_data_name][positive_choice, :, :], axis=0)
             positive_y = np.expand_dims(data_file[y_data_name][positive_choice, :, ], axis=0)
@@ -286,9 +286,9 @@ def main():
     if args.model_path is not None:
         with CustomObjectScope({'_euclidean_distance': cnn_keras_siamese._euclidean_distance, 'ALPHA': cnn_keras_siamese.ALPHA}):
             triplet_model = load_model(args.model_path)
-        create_triplets(args, "X_train_singles", "y_train_singles", output_name="train", data_file=data_file, triplet_model=triplet_model)
+        create_triplets(args, "X_train_singles", "y_train_singles", output_name="train", data_file=data_file, n_examples_per_anchor=100, triplet_model=triplet_model)
     else:
-        create_triplets(args, "X_train_singles", "y_train_singles", output_name="train", data_file=data_file)
+        create_triplets(args, "X_train_singles", "y_train_singles", output_name="train", data_file=data_file, n_examples_per_anchor=100)
 
     # Delete the train "singles"
     del data_file["X_train_singles"]
@@ -309,7 +309,7 @@ def main():
     data_file.create_dataset("y_valid_negatives", shape=(0, n_users), maxshape=(None, n_users), dtype=float)
 
     # Generate validation triplets
-    create_triplets(args, "X_valid_singles", "y_valid_singles", output_name="valid", data_file=data_file)
+    create_triplets(args, "X_valid_singles", "y_valid_singles", output_name="valid", data_file=data_file, n_examples_per_anchor=10)
 
     # Delete the validation "singles"
     del data_file["X_valid_singles"]

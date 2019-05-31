@@ -276,6 +276,8 @@ def main():
 
     elif args.mode == "mixed":
 
+        args.loss_thresh = None
+
         # Split the data into train/valid/test
         X_train, y_train, X_valid, y_valid, X_test, y_test = utils.split_per_user(X, y, train_frac=args.train_frac, valid_frac=args.valid_frac,
                                                                                   test_frac=args.test_frac, shuffle=True)
@@ -288,6 +290,22 @@ def main():
 
         data_file.create_dataset("X_test", data=X_test, maxshape=(None, args.example_length, FEATURE_LENGTH), dtype=float)
         data_file.create_dataset("y_test", data=y_test, maxshape=(None, n_users), dtype=float)
+
+        # Create datasets for triplet training data
+        data_file.create_dataset("X_train_anchors", shape=(0, args.example_length, FEATURE_LENGTH),
+                                 maxshape=(None, args.example_length, FEATURE_LENGTH), dtype=float)
+        data_file.create_dataset("y_train_anchors", shape=(0, n_users), maxshape=(None, n_users), dtype=float)
+
+        data_file.create_dataset("X_train_positives", shape=(0, args.example_length, FEATURE_LENGTH),
+                                 maxshape=(None, args.example_length, FEATURE_LENGTH), dtype=float)
+        data_file.create_dataset("y_train_positives", shape=(0, n_users), maxshape=(None, n_users), dtype=float)
+
+        data_file.create_dataset("X_train_negatives", shape=(0, args.example_length, FEATURE_LENGTH),
+                                 maxshape=(None, args.example_length, FEATURE_LENGTH), dtype=float)
+        data_file.create_dataset("y_train_negatives", shape=(0, n_users), maxshape=(None, n_users), dtype=float)
+
+        # Generate training triplets
+        generate_triplets.create_triplets(args, "X_train", "y_train", output_name="train", n_examples_per_anchor=2, data_file=data_file)
 
         # Create datasets for triplet validation data
         data_file.create_dataset("X_valid_anchors", shape=(0, args.example_length, FEATURE_LENGTH),
@@ -303,8 +321,7 @@ def main():
         data_file.create_dataset("y_valid_negatives", shape=(0, n_users), maxshape=(None, n_users), dtype=float)
 
         # Generate validation triplets
-        args.loss_thresh = None
-        generate_triplets.create_triplets(args, "X_valid", "y_valid", output_name="valid", data_file=data_file)
+        generate_triplets.create_triplets(args, "X_valid", "y_valid", output_name="valid", n_examples_per_anchor=10, data_file=data_file)
 
         # Delete the validation "singles"
         del data_file["X_valid"]
