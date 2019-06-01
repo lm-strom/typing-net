@@ -31,12 +31,12 @@ import utils
 PERIOD = 10
 
 # Parameters
-ALPHA = 5  # Triplet loss threshold
-LEARNING_RATE = 0.3e-5  # Start learning rate
-LR_DROP = 0.8  # Learning rate multiplier every LR_DROP_INTERVAL
-LR_DROP_INTERVAL = 5  # How many epochs to run before dropping learning rate
+ALPHA = 1  # Triplet loss threshold
+LEARNING_RATE = 1e-3  # Start learning rate
+LR_DROP = 0.5  # Learning rate multiplier every LR_DROP_INTERVAL
+LR_DROP_INTERVAL = 20  # How many epochs to run before dropping learning rate
 EPOCHS = 1000
-BATCH_SIZE = 64
+BATCH_SIZE = 100
 
 # Global variables
 stop_flag = False  # Flag to indicate that training was terminated early
@@ -350,11 +350,11 @@ def _triplet_distance(vects):
     """
 
     A, P, N = vects
-    return K.maximum(_euclidean_distance([A, P]) - 0.5 * _euclidean_distance([A, N]) + ALPHA, 0.0)
+    return K.maximum(_euclidean_distance([A, P]) - _euclidean_distance([A, N]) + ALPHA, 0.0)
 
 
 def relu_clipped(x):
-    return relu(x, max_value=10000)
+    return relu(x, max_value=1000)
 
 
 def build_tower_cnn_model(input_shape):
@@ -369,13 +369,14 @@ def build_tower_cnn_model(input_shape):
     x = x0
     for i in range(len(n_channels)):
         x = Conv1D(n_channels[i], kernel_size=kernel, strides=2, activation="relu", padding='same')(x)
-        # x = Activation(relu_clipped)(x)
-        if i == 0:
-            x = BatchNormalization()(x)
+        #x = Activation(relu_clipped)(x)
+        #if i == 0:
+            #x = BatchNormalization()(x)
         x = MaxPooling1D(5)(x)
 
     x = Flatten()(x)
-    y = Dense(80, name='dense_encoding')(x)
+    y = Dense(40, name='dense_encoding')(x)
+    #y = Lambda(lambda  x: K.l2_normalize(x,axis=1))(y)
 
     model = Model(inputs=x0, outputs=y)
 

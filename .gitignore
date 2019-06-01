@@ -3,6 +3,7 @@ processed_data
 virtual_enviroment
 metrics
 AWS
+testing
 
 *.hdf5
 

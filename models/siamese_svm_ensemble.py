@@ -50,11 +50,18 @@ def shuffle(X, y):
 def accuracy_FAR_FRR(y_true, y_pred):
 
     n_examples = y_true.shape[0]
+    n_actual_examples = len(range(0, n_examples, 9))
 
     correct = 0
     FAR_errors = 0
     FRR_errors = 0
-    for i in range(n_examples):
+    for i in range(0, n_examples-10, 9):
+
+        sum = 0
+        for ii in range(9):
+            sum += y_pred[i+ii]
+        
+        y_pred[i] = int(sum > 4) 
 
         if y_true[i] == y_pred[i]:
             correct += 1
@@ -65,9 +72,9 @@ def accuracy_FAR_FRR(y_true, y_pred):
         elif y_true[i] == 1 and y_pred[i] == 0:
             FRR_errors += 1
 
-    accuracy = float(correct) / n_examples
-    FAR = float(FAR_errors) / (n_examples - np.sum(y_true))
-    FRR = float(FRR_errors) / np.sum(y_true)
+    accuracy = float(correct) / n_actual_examples
+    FAR = float(FAR_errors) / (n_actual_examples - int(np.sum(y_true)/9))
+    FRR = float(FRR_errors) / int(np.sum(y_true)/9)
 
     return accuracy, FAR, FRR
 
@@ -119,18 +126,19 @@ def main():
         X_valid_positives, _ = utils.load_examples(args.triplets_path, "valid_positives")
         X_valid_negatives, _ = utils.load_examples(args.triplets_path, "valid_negatives")
 
+
         # Get abs(distance) of embeddings
         X_train_1, X_train_0 = pair_distance_model.predict([X_train_anchors, X_train_positives, X_train_negatives])
+
+        ii = 0
+        for i in range(X_valid_anchors.shape[0]):
+            X_valid_anchors[i,:,:] = X_valid_anchors[ii*10,:,:]
+
+            if i % 10 == 9:
+                ii += 1
+
         X_valid_1, X_valid_0 = pair_distance_model.predict([X_valid_anchors, X_valid_positives, X_valid_negatives])
 
-    else:  # Read data in batches
-
-        training_batch_generator = utils.DataGenerator(args.triplets_path, "train", batch_size=100, stop_after_batch=10)
-        validation_batch_generator = utils.DataGenerator(args.triplets_path, "valid", batch_size=1000)
-
-        # Get abs(distance) of embeddings (one batch at a time)
-        X_train_1, X_train_0 = pair_distance_model.predict_generator(generator=training_batch_generator, verbose=1)
-        X_valid_1, X_valid_0 = pair_distance_model.predict_generator(generator=validation_batch_generator, verbose=1)
 
     # Stack positive and negative examples
     X_train = np.vstack((X_train_1, X_train_0))
@@ -140,7 +148,7 @@ def main():
 
     # Shuffle the data
     X_train, y_train = shuffle(X_train, y_train)
-    X_valid, y_valid = shuffle(X_valid, y_valid)
+    #X_valid, y_valid = shuffle(X_valid, y_valid)
 
     # Train SVM
     clf = svm.SVC(gamma='scale', verbose=True)

@@ -1,1 +1,1 @@
-Maybe filter size 9 is making everything super slow. Go back to size 5.
+Maybe filter size 9 is making everything super slow. Go back to size 5. No. It is true but not very relevant.
