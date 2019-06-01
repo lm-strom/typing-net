@@ -99,7 +99,7 @@ def main():
 
     # Parse arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument(dest="data_path", metavar="data_PATH", help="Path to read data from.")
+    parser.add_argument(dest="data_path", metavar="DATA_PATH", help="Path to read data from.")
     parser.add_argument(dest="model_path", metavar="MODEL_PATH", help="Path to read model from.")
     parser.add_argument("-b", "--read_batches", metavar="READ_BATCHES", default=False, help="If true, data is read incrementally in batches during training.")
     args = parser.parse_args()
