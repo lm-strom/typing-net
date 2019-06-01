@@ -55,13 +55,13 @@ def accuracy_FAR_FRR(y_true, y_pred):
     correct = 0
     FAR_errors = 0
     FRR_errors = 0
-    for i in range(0, n_examples-10, 9):
+    for i in range(0, n_examples - 10, 9):
 
         sum = 0
         for ii in range(9):
-            sum += y_pred[i+ii]
-        
-        y_pred[i] = int(sum > 4) 
+            sum += y_pred[i + ii]
+
+        y_pred[i] = int(sum > 4)
 
         if y_true[i] == y_pred[i]:
             correct += 1
@@ -73,8 +73,8 @@ def accuracy_FAR_FRR(y_true, y_pred):
             FRR_errors += 1
 
     accuracy = float(correct) / n_actual_examples
-    FAR = float(FAR_errors) / (n_actual_examples - int(np.sum(y_true)/9))
-    FRR = float(FRR_errors) / int(np.sum(y_true)/9)
+    FAR = float(FAR_errors) / (n_actual_examples - int(np.sum(y_true) / 9))
+    FRR = float(FRR_errors) / int(np.sum(y_true) / 9)
 
     return accuracy, FAR, FRR
 

@@ -19,11 +19,13 @@ import keras
 from keras.models import Model
 from keras.layers import Dense, Input, Lambda, Activation
 from keras.layers import Conv1D, MaxPooling1D, Flatten
+from keras.models import Sequential
 from keras.activations import relu
 from keras.layers.normalization import BatchNormalization
 from keras.optimizers import Adam
 from keras.callbacks import Callback, ModelCheckpoint, LearningRateScheduler
 import keras.backend as K
+from keras.losses import categorical_crossentropy
 
 import utils
 
@@ -383,7 +385,20 @@ def build_tower_cnn_model(input_shape):
     return model
 
 
-def build_triplet_model(input_shape, tower_model):
+def classification_model(input_shape, n_classes):
+    """
+    Builds a classification model that takes an embedding as input
+    and outputs class prediction.
+    """
+
+    model = Sequential()
+    model.add(Dense(100, activation="relu", input_shape=input_shape))
+    model.add(Dense(50, activation="softmax"))
+
+    return model
+
+
+def build_triplet_model(input_shape, tower_model, n_classes):
     """
     Builds a model that takes a triplet as input, feeds them through
     tower_model and outputs the triplet loss of the embeddings.
@@ -392,21 +407,29 @@ def build_triplet_model(input_shape, tower_model):
     input_B = Input(input_shape)
     input_C = Input(input_shape)
 
+    input_y_A = Input((input_shape[0], n_classes))
+    input_y_B = Input((input_shape[0], n_classes))
+    input_y_C = Input((input_shape[0], n_classes))
+
     tower_model.summary()
 
     x_A = tower_model(input_A)
     x_B = tower_model(input_B)
     x_C = tower_model(input_C)
 
-    distance = Lambda(_triplet_distance, output_shape=_eucl_dist_output_shape)([x_A, x_B, x_C])
+    # Classification part
+    class_model = classification_model(x_A.shape, n_classes=n_classes)
+    y_pred_A = class_model(x_A)
+    y_pred_B = class_model(x_B)
+    y_pred_C = class_model(x_C)
+    class_loss = categorical_crossentropy(input_y_A, y_pred_A) + categorical_crossentropy(input_y_B, y_pred_B) + categorical_crossentropy(input_y_C, y_pred_C)
 
-    model = Model([input_A, input_B, input_C], distance, name='siamese')
+    triplet_loss = Lambda(_triplet_distance, output_shape=_eucl_dist_output_shape)([x_A, x_B, x_C])
+
+    output = triplet_loss + class_loss
+    model = Model([input_A, input_B, input_C], output, name='siamese')
 
     return model
-
-
-def custom_loss(y_true, y_pred):
-    return y_pred
 
 
 def parse_args(args):
@@ -431,6 +454,10 @@ def parse_args(args):
                 os.makedirs(args.metrics_path)
 
 
+def custom_loss(y_true, y_pred):
+    return y_pred
+
+
 def main():
 
     # Parse arguments
@@ -450,8 +477,9 @@ def main():
 
     # Build model
     input_shape = X_shape[1:]
+    n_classes = y_shape[1]
     tower_model = build_tower_cnn_model(input_shape)  # single input model
-    triplet_model = build_triplet_model(input_shape, tower_model)  # siamese model
+    triplet_model = build_triplet_model(input_shape, tower_model, n_classes)  # siamese model
     if args.load_path is not None:
         triplet_model.load_weights(args.load_path)
 
