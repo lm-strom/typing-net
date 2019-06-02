@@ -147,8 +147,8 @@ def main():
     clf.fit(X_train[:10000, :], y_train[:10000])
 
     # Evaluate SVM
-    y_pred = clf.predict(X_train)
-    accuracy, FAR, FRR = accuracy_FAR_FRR(y_train, y_pred)
+    y_pred = clf.predict(X_valid)
+    accuracy, FAR, FRR = accuracy_FAR_FRR(y_valid, y_pred)
     print("\n\n---- Validation Results ----")
     print("Accuracy = {}".format(accuracy))
     print("FAR = {}".format(FAR))

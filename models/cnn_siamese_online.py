@@ -10,19 +10,17 @@ import os
 import signal
 import argparse
 import random
-import math
 
 import numpy as np
 import h5py
 
 import keras
 from keras.models import Model
-from keras.layers import Dense, Input, Lambda, Activation
+from keras.layers import Dense, Input, Lambda
 from keras.layers import Conv1D, MaxPooling1D, Flatten
-from keras.activations import relu
 from keras.layers.normalization import BatchNormalization
 from keras.optimizers import Adam
-from keras.callbacks import Callback, ModelCheckpoint, LearningRateScheduler
+from keras.callbacks import Callback, ModelCheckpoint
 import keras.backend as K
 
 import utils
@@ -31,10 +29,8 @@ import utils
 PERIOD = 10
 
 # Parameters
-ALPHA = 5  # Triplet loss threshold
-LEARNING_RATE = 0.3e-5  # Start learning rate
-LR_DROP = 0.8  # Learning rate multiplier every LR_DROP_INTERVAL
-LR_DROP_INTERVAL = 5  # How many epochs to run before dropping learning rate
+ALPHA = 0.3  # Triplet loss threshold
+LEARNING_RATE = 0.5e-2
 EPOCHS = 1000
 BATCH_SIZE = 64
 
@@ -69,7 +65,7 @@ class OnlineTripletGenerator(keras.utils.Sequence):
 
         self.indices = list(range(self.n_examples))
 
-        assert triplet_mode in ["batch_all", "batch_hard"], "Invalid triplet mode. Choose between batch_all and batch_hard."
+        assert triplet_mode in ["batch_all", "batch_hard", "random"], "Invalid triplet mode. Choose between batch_all and batch_hard."
         self.triplet_mode = triplet_mode
 
         self.on_epoch_end()
@@ -291,27 +287,15 @@ def setup_callbacks(save_path):
     Sets up callbacks for early stopping and model saving.
     """
 
+    signal.signal(signal.SIGINT, handler)
+
     callback_list = []
 
-    # Terminate on CTRL+C
-    signal.signal(signal.SIGINT, handler)
-    callback_list.append(TerminateOnFlag())
+    callback_list.append(TerminateOnFlag())  # Terminate training if CTRL+C
 
-    # Save weights
     if save_path is not None:
         model_checkpoint = ModelCheckpoint(save_path + "_class_model_{epoch:02d}_{val_loss:.2f}.hdf5", monitor="val_loss", save_best_only=True, verbose=1, period=10)  # Save model every 10 epochs
         callback_list.append(model_checkpoint)
-
-    # Learning rate scheduler
-    def step_decay(epoch):
-        initial_lrate = LEARNING_RATE
-        drop = LR_DROP
-        epochs_drop = LR_DROP_INTERVAL
-        lrate = initial_lrate * math.pow(drop, math.floor((1 + epoch) / epochs_drop))
-        return lrate
-
-    lr_scheduler = LearningRateScheduler(step_decay, verbose=1)
-    callback_list.append(lr_scheduler)
 
     return callback_list
 
@@ -350,11 +334,10 @@ def _triplet_distance(vects):
     """
 
     A, P, N = vects
-    return K.maximum(_euclidean_distance([A, P]) - 0.5 * _euclidean_distance([A, N]) + ALPHA, 0.0)
+    return K.maximum(_euclidean_distance([A, P]) - _euclidean_distance([A, N]) + ALPHA, 0.0)
 
-
-def relu_clipped(x):
-    return relu(x, max_value=10000)
+def relu_clipped():
+    pass
 
 
 def build_tower_cnn_model(input_shape):
@@ -363,19 +346,18 @@ def build_tower_cnn_model(input_shape):
     """
 
     x0 = Input(input_shape, name='Input')
-    
-    kernel = 7
-    n_channels = [32]
+
+    kernel = 5
+    n_channels = [24]
     x = x0
     for i in range(len(n_channels)):
-        x = Conv1D(n_channels[i], kernel_size=kernel, strides=2, activation="relu", padding='same')(x)
-        # x = Activation(relu_clipped)(x)
-        if i == 0:
-            x = BatchNormalization()(x)
+        x = Conv1D(n_channels[i], kernel_size=kernel, strides=2, activation='relu', padding='same')(x)
+        x = BatchNormalization()(x)
         x = MaxPooling1D(5)(x)
 
     x = Flatten()(x)
-    y = Dense(80, name='dense_encoding')(x)
+    y = Dense(40, name='dense_encoding')(x)
+    y = Lambda(lambda  x: K.l2_normalize(x,axis=1))(y)
 
     model = Model(inputs=x0, outputs=y)
 
