@@ -12,7 +12,7 @@ import utils
 
 from keras.utils import CustomObjectScope
 from keras.models import load_model, Model
-import cnn_keras_siamese
+import cnn_siamese_online
 
 # Constants
 FEATURE_LENGTH = 6

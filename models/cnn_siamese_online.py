@@ -31,8 +31,10 @@ PERIOD = 10
 # Parameters
 ALPHA = 0.3  # Triplet loss threshold
 LEARNING_RATE = 0.5e-2
+LR_DROP = 0.5  # Learning rate multiplier every LR_DROP_INTERVAL
+LR_DROP_INTERVAL = 20  # How many epochs to run before dropping learning rate
 EPOCHS = 1000
-BATCH_SIZE = 64
+BATCH_SIZE = 100
 
 # Global variables
 stop_flag = False  # Flag to indicate that training was terminated early
@@ -336,8 +338,9 @@ def _triplet_distance(vects):
     A, P, N = vects
     return K.maximum(_euclidean_distance([A, P]) - _euclidean_distance([A, N]) + ALPHA, 0.0)
 
-def relu_clipped():
-    pass
+
+def relu_clipped(x):
+    return relu(x, max_value=1000)
 
 
 def build_tower_cnn_model(input_shape):
@@ -384,6 +387,10 @@ def build_triplet_model(input_shape, tower_model):
     model = Model([input_A, input_B, input_C], distance, name='siamese')
 
     return model
+
+
+def custom_loss(y_true, y_pred):
+    return y_pred
 
 
 def parse_args(args):
@@ -437,7 +444,7 @@ def main():
 
     # Compile model
     adam = Adam(lr=LEARNING_RATE)
-    triplet_model.compile(optimizer=adam, loss='mean_squared_error')
+    triplet_model.compile(optimizer=adam, loss=custom_loss)
     tower_model.predict(np.zeros((1,) + input_shape))  # predict on some random data to activate predict()
 
     # Initializate online triplet generators
