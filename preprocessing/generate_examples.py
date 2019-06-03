@@ -13,7 +13,7 @@ import utils
 import generate_triplets
 
 # Constants
-FEATURE_LENGTH = 6
+FEATURE_LENGTH = 5
 
 
 def create_examples(input_path, data_file, example_length):
