@@ -14,7 +14,7 @@ import cnn_siamese_online
 import utils
 
 # Parameters
-K = 3
+K = 5
 
 
 def shuffle(X, y):

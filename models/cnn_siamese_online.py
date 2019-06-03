@@ -16,7 +16,7 @@ import h5py
 
 import keras
 from keras.models import Model
-from keras.layers import Dense, Input, Lambda
+from keras.layers import Dense, Input, Lambda, Activation
 from keras.layers import Conv1D, MaxPooling1D, Flatten
 from keras.layers.normalization import BatchNormalization
 from keras.activations import relu
@@ -253,7 +253,7 @@ class OnlineTripletGenerator(keras.utils.Sequence):
         triplet_loss = np.maximum(triplet_loss, 0.0)
 
         # Find triplets where loss > 0
-        anchor_inds, positive_inds, negative_inds = np.where((triplet_loss > 1e-16))  # & (triplet_loss <= 1))
+        anchor_inds, positive_inds, negative_inds = np.where((triplet_loss > 1e-16) & (triplet_loss <= ALPHA))
 
         # Convert to lists
         anchor_inds = anchor_inds.tolist()
@@ -357,8 +357,9 @@ def build_tower_cnn_model(input_shape):
     n_channels = [24]
     x = x0
     for i in range(len(n_channels)):
-        x = Conv1D(n_channels[i], kernel_size=kernel, strides=2, activation='relu', padding='same')(x)
+        x = Conv1D(n_channels[i], kernel_size=kernel, strides=2, padding='same')(x)
         x = BatchNormalization()(x)
+        x = Activation("relu")(x)
         x = MaxPooling1D(5)(x)
 
     x = Flatten()(x)
