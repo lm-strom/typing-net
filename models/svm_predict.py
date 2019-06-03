@@ -86,18 +86,37 @@ def ensemble_accuracy_FAR_FRR(pair_distance_model, svm_model, X_test_separated, 
 
     for a in range(n_examples_user):
 
-        # Select positive and negative
-        p = random.choice(list(range(a)) + list(range(a + 1, n_examples_user)))  # pick a random example from the same user
-        other_user = random.choice(list(range(user)) + list(range(user + 1, n_users)))  # pick a random different user
-        n = random.choice(list(range(X_test_separated[other_user].shape[0])))  # pick a random example from that user
         anchor = np.expand_dims(X_test_user[a, :, :], 0)
-        positive = np.expand_dims(X_test_user[p, :, :], 0)
-        negative = np.expand_dims(X_test_separated[other_user][n, :, :], 0)
+
+        # Select positives and negatives
+        positives = []
+        negatives = []
+        other_user = random.choice(list(range(user)) + list(range(user + 1, n_users)))  # pick a random different user
+        candidate_positives = list(range(a)) + list(range(a + 1, n_examples_user))
+        candidate_negatives = list(range(X_test_separated[other_user].shape[0]))
+
+        for i in range(ensemble_size):
+            p = random.choice(candidate_positives)  # pick a random example from the same user
+            n = random.choice(candidate_negatives)  # pick a random example from that user
+            candidate_positives.remove(p)
+            candidate_negatives.remove(n)
+
+            positive = np.expand_dims(X_test_user[p, :, :], 0)
+            positives.append(positive)
+            negative = np.expand_dims(X_test_separated[other_user][n, :, :], 0)
+            negatives.append(negative)
+
+        # Reformat data for prediction
+        anchors = np.tile(anchor.T, ensemble_size).T
+        positives = np.squeeze(np.array(positives))
+        negatives = np.squeeze(np.array(negatives))
 
         # Predict
-        AP_dist, AN_dist = pair_distance_model.predict([anchor, positive, negative])
-        y_pos_pred = svm_model.predict(AP_dist)
-        y_neg_pred = svm_model.predict(AN_dist)
+        AP_dists, AN_dists = pair_distance_model.predict([anchors, positives, negatives])
+        y_pos_preds = svm_model.predict(AP_dists)
+        y_neg_preds = svm_model.predict(AN_dists)
+        y_pos_pred = (np.sum(y_pos_preds) > (ensemble_size // 2))
+        y_neg_pred = (np.sum(y_neg_preds) > (ensemble_size // 2))
 
         # Evaluate
         if y_pos_pred == 1:
