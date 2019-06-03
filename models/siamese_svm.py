@@ -1,5 +1,6 @@
 import os
 import argparse
+import random
 
 import numpy as np
 from sklearn import svm
@@ -72,84 +73,68 @@ def accuracy_FAR_FRR(y_true, y_pred):
     return accuracy, FAR, FRR
 
 
-def ensemble_accuracy_FAR_FRR(y_true, y_pred, ensemble_size):
-
-    n_examples = y_true.shape[0]
-    n_actual_examples = len(range(0, n_examples, ensemble_size - 1))
-
-    correct = 0
-    FAR_errors = 0
-    FRR_errors = 0
-    for i in range(0, n_examples - ensemble_size, ensemble_size - 1):
-
-        sum = 0
-        for ii in range(ensemble_size - 1):
-            sum += y_pred[i + ii]
-
-        y_pred[i] = int(sum > (ensemble_size // 2))
-
-        if y_true[i] == y_pred[i]:
-            correct += 1
-
-        elif y_true[i] == 0 and y_pred[i] == 1:
-            FAR_errors += 1
-
-        elif y_true[i] == 1 and y_pred[i] == 0:
-            FRR_errors += 1
-
-    accuracy = float(correct) / n_actual_examples
-    FAR = float(FAR_errors) / (n_actual_examples - int(np.sum(y_true) / (ensemble_size - 1)))
-    FRR = float(FRR_errors) / int(np.sum(y_true) / (ensemble_size - 1))
-
-    return accuracy, FAR, FRR
-
-
-def ensemble_accuracy_FAR_FRR(y_pred_separated, user, ensemble_size):
+def ensemble_accuracy_FAR_FRR(pair_distance_model, svm_model, X_test_separated, user, ensemble_size):
     """
     Compute ensemble accuracy, FAR and FRR
     """
     n_FA, n_FR, n_correct = 0, 0, 0
-    n_FA_trials, n_FR_trials, n_trials = 0, 0, 0
-    y_pred_user = y_pred_separated[user]
+    n_trials = 0
 
-    for y_pred in y_pred_user:
+    n_users = len(X_test_separated)
+    X_test_user = X_test_separated[user]
+    n_examples_user = X_test_user.shape[0]
 
-        pass
+    for a in range(n_examples_user):
 
-        # Acceptance trial
+        # Select positive and negative
+        p = random.choice(list(range(a)) + list(range(a + 1, n_examples_user)))  # pick a random example from the same user
+        other_user = random.choice(list(range(user)) + list(range(user + 1, n_users)))  # pick a random different user
+        n = random.choice(list(range(X_test_separated[other_user].shape[0])))  # pick a random example from that user
+        anchor = np.expand_dims(X_test_user[a, :, :], 0)
+        positive = np.expand_dims(X_test_user[p, :, :], 0)
+        negative = np.expand_dims(X_test_separated[other_user][n, :, :], 0)
 
-        # Rejection trial
+        # Predict
+        AP_dist, AN_dist = pair_distance_model.predict([anchor, positive, negative])
+        y_pos_pred = svm_model.predict(AP_dist)
+        y_neg_pred = svm_model.predict(AN_dist)
 
-    return n_FA, n_FA_trials, n_FR, n_FR_trials, n_correct, n_trials
+        # Evaluate
+        if y_pos_pred == 1:
+            n_correct += 1
+        else:
+            n_FR += 1
+
+        if y_neg_pred == 0:
+            n_correct += 1
+        else:
+            n_FA += 1
+
+        n_trials += 1
+
+    return n_FA, n_FR, n_correct, n_trials
 
 
-def predict_and_evaluate(svm_model, X_test_separated, ensemble_size):
+def predict_and_evaluate(pair_distance_model, svm_model, X_test_separated, ensemble_size):
     """
     Make predictions on X_test_separated (list of data per user)
-    using svm_model, and ensembling of size ensemble_size.
+    using pair_distance_model and svm_model, and ensembling of size ensemble_size.
     """
     n_users = len(X_test_separated)
 
-    # Predict
-    y_pred_separated = []
-    for user in range(n_users):
-        y_pred_separated.append(svm_model.predict(X_test_separated[user]))
-
     # Evaluate
     n_FA_tot, n_FR_tot, n_correct_tot = 0, 0, 0
-    n_FA_trials_tot, n_FR_trials_tot, n_trials_tot = 0, 0, 0
+    n_trials_tot = 0
     for user in range(n_users):
-        n_FA, n_FA_trials, n_FR, n_FR_trials, n_correct, n_trials = ensemble_accuracy_FAR_FRR(y_pred_separated, user, ensemble_size)
+        n_FA, n_FR, n_correct, n_trials = ensemble_accuracy_FAR_FRR(pair_distance_model, svm_model, X_test_separated, user, ensemble_size)
         n_FA_tot += n_FA
-        n_FA_trials_tot += n_FA_trials
         n_FR_tot += n_FR
-        n_FR_trials_tot += n_FR_trials
         n_correct_tot += n_correct
         n_trials_tot += n_trials
 
-    accuracy = float(n_correct_tot) / n_trials_tot
-    FAR = float(n_FA_tot) / n_FA_trials_tot
-    FRR = float(n_FR_tot) / n_FR_trials_tot
+    accuracy = float(n_correct_tot) / (2 * n_trials_tot)
+    FAR = float(n_FA_tot) / n_trials_tot
+    FRR = float(n_FR_tot) / n_trials_tot
 
     return accuracy, FAR, FRR
 
@@ -217,25 +202,21 @@ def main():
     svm_model.fit(X_train[:10000, :], y_train[:10000])
 
     # Load test data
-    X_test_separated = utils.load_X(args.triplets_path, "test_separated")
+    _, y_test_shape = utils.get_shapes(args.triplets_path, "test")
+    n_users = y_test_shape[1]
+    X_test_separated = []
+    for j in range(n_users):
+        X_test_j = utils.load_X(args.triplets_path, "test_" + str(j))
+        X_test_separated.append(X_test_j)
 
     # Predict and evaluate
-    accuracy, FAR, FRR = predict_and_evaluate(svm_model, X_test_separated, args.ensemble)
+    accuracy, FAR, FRR = predict_and_evaluate(pair_distance_model, svm_model, X_test_separated, args.ensemble)
 
-    """
-    y_pred = svm_model.predict(X_test)
-
-    if args.ensemble > 1:
-        accuracy, FAR, FRR = ensemble_accuracy_FAR_FRR(y_test, y_pred, args.ensemble)
-        print("\n\n---- Validation Results. With ensembling = {}. ----".format(args.ensemble))
-    else:
-        accuracy, FAR, FRR = accuracy_FAR_FRR(y_test, y_pred)
-        print("\n\n---- Validation Results. No ensembling. ----")
-
+    print("\n---- Test Results ----")
     print("Accuracy = {}".format(accuracy))
     print("FAR = {}".format(FAR))
     print("FRR = {}".format(FRR))
-    """
+
 
 if __name__ == "__main__":
     main()

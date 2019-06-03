@@ -157,10 +157,9 @@ def split_all_users(X_data_name, y_data_name, output_name, data_file, append_ran
         data_file.create_dataset(y_name_user_j, data=y_user_j, dtype=float)
 
 
-def split_all_users_single_dataset(X_data_name, y_data_name, output_name, data_file):
+def split_all_users_multi_dataset(X_data_name, y_data_name, output_name, data_file):
     """
-    Split dataset into one per user, and write to data_file as a dataset with name
-    output_name containing an array of numpy objects (one for each user).
+    Split dataset into one per user, and write to one dataset each.
     """
 
     n_examples = data_file[X_data_name].shape[0]
@@ -174,15 +173,10 @@ def split_all_users_single_dataset(X_data_name, y_data_name, output_name, data_f
         user_ind_dict[j].append(i)
 
     # Extract the data for each user (append randoms if specified)
-    data = []
     print("Splitting into one dataset per user...")
     for j in tqdm(range(n_users)):
         X_user_j = data_file[X_data_name][user_ind_dict[j], :, :]
-        data.append(X_user_j)
-
-    # Write to file
-    special_dtype = h5py.special_dtype(vlen=np.dtype('float32'))
-    data_file.create_dataset(output_name, data=np.asarray(data), dtype=special_dtype)
+        data_file.create_dataset(output_name + "_" + str(j), data=X_user_j)  # Write to file
 
 
 def parse_args(args):
@@ -352,7 +346,7 @@ def main():
         generate_triplets.create_triplets(args, "X_valid", "y_valid", output_name="valid", n_examples_per_anchor=10, data_file=data_file)
 
         # Split test by user into matrix
-        split_all_users_single_dataset("X_test", "y_test", "X_test_separated", data_file)
+        split_all_users_multi_dataset("X_test", "y_test", "X_test", data_file)
 
     print("\nExample generation successful!")
     print("Datasets are saved in: {}".format(args.output_path + data_file_name))
