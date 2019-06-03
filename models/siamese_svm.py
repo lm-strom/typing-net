@@ -104,6 +104,56 @@ def ensemble_accuracy_FAR_FRR(y_true, y_pred, ensemble_size):
     return accuracy, FAR, FRR
 
 
+def ensemble_accuracy_FAR_FRR(y_pred_separated, user, ensemble_size):
+    """
+    Compute ensemble accuracy, FAR and FRR
+    """
+    n_FA, n_FR, n_correct = 0, 0, 0
+    n_FA_trials, n_FR_trials, n_trials = 0, 0, 0
+    y_pred_user = y_pred_separated[user]
+
+    for y_pred in y_pred_user:
+
+        pass
+
+        # Acceptance trial
+
+        # Rejection trial
+
+    return n_FA, n_FA_trials, n_FR, n_FR_trials, n_correct, n_trials
+
+
+def predict_and_evaluate(svm_model, X_test_separated, ensemble_size):
+    """
+    Make predictions on X_test_separated (list of data per user)
+    using svm_model, and ensembling of size ensemble_size.
+    """
+    n_users = len(X_test_separated)
+
+    # Predict
+    y_pred_separated = []
+    for user in range(n_users):
+        y_pred_separated.append(svm_model.predict(X_test_separated[user]))
+
+    # Evaluate
+    n_FA_tot, n_FR_tot, n_correct_tot = 0, 0, 0
+    n_FA_trials_tot, n_FR_trials_tot, n_trials_tot = 0, 0, 0
+    for user in range(n_users):
+        n_FA, n_FA_trials, n_FR, n_FR_trials, n_correct, n_trials = ensemble_accuracy_FAR_FRR(y_pred_separated, user, ensemble_size)
+        n_FA_tot += n_FA
+        n_FA_trials_tot += n_FA_trials
+        n_FR_tot += n_FR
+        n_FR_trials_tot += n_FR_trials
+        n_correct_tot += n_correct
+        n_trials_tot += n_trials
+
+    accuracy = float(n_correct_tot) / n_trials_tot
+    FAR = float(n_FA_tot) / n_FA_trials_tot
+    FRR = float(n_FR_tot) / n_FR_trials_tot
+
+    return accuracy, FAR, FRR
+
+
 def parse_args(args):
     """
     Checks that input args are valid.
@@ -151,29 +201,29 @@ def main():
         X_train_anchors, _ = utils.load_examples(args.triplets_path, "train_anchors")
         X_train_positives, _ = utils.load_examples(args.triplets_path, "train_positives")
         X_train_negatives, _ = utils.load_examples(args.triplets_path, "train_negatives")
-        X_test_anchors, _ = utils.load_examples(args.triplets_path, "test_anchors")
-        X_test_positives, _ = utils.load_examples(args.triplets_path, "test_positives")
-        X_test_negatives, _ = utils.load_examples(args.triplets_path, "test_negatives")
 
         # Get abs(distance) of embeddings
         X_train_1, X_train_0 = pair_distance_model.predict([X_train_anchors, X_train_positives, X_train_negatives])
-        X_test_1, X_test_0 = pair_distance_model.predict([X_test_anchors, X_test_positives, X_test_negatives])
 
     # Stack positive and negative examples
     X_train = np.vstack((X_train_1, X_train_0))
     y_train = np.hstack((np.ones(X_train_1.shape[0], ), np.zeros(X_train_0.shape[0],)))
-    X_test = np.vstack((X_test_1, X_test_0))
-    y_test = np.hstack((np.ones(X_test_1.shape[0], ), np.zeros(X_test_0.shape[0],)))
 
     # Shuffle the data
     X_train, y_train = shuffle(X_train, y_train)
 
     # Train SVM
-    clf = svm.SVC(gamma='scale', verbose=True)
-    clf.fit(X_train[:10000, :], y_train[:10000])
+    svm_model = svm.SVC(gamma='scale', verbose=True)
+    svm_model.fit(X_train[:10000, :], y_train[:10000])
 
-    # Evaluate SVM
-    y_pred = clf.predict(X_test)
+    # Load test data
+    X_test_separated = utils.load_X(args.triplets_path, "test_separated")
+
+    # Predict and evaluate
+    accuracy, FAR, FRR = predict_and_evaluate(svm_model, X_test_separated, args.ensemble)
+
+    """
+    y_pred = svm_model.predict(X_test)
 
     if args.ensemble > 1:
         accuracy, FAR, FRR = ensemble_accuracy_FAR_FRR(y_test, y_pred, args.ensemble)
@@ -185,7 +235,7 @@ def main():
     print("Accuracy = {}".format(accuracy))
     print("FAR = {}".format(FAR))
     print("FRR = {}".format(FRR))
-
+    """
 
 if __name__ == "__main__":
     main()

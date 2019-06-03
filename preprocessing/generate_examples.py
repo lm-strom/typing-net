@@ -138,12 +138,12 @@ def split_all_users(X_data_name, y_data_name, output_name, data_file, append_ran
         n_examples_user_j = X_user_j.shape[0]
         y_user_j = np.ones((n_examples_user_j,))
 
-        N_RANDOM_USERS = n_users//2
+        N_RANDOM_USERS = n_users // 2
         if append_randoms:
             random_users = random.sample(list(range(j)) + list(range(j + 1, n_users)), N_RANDOM_USERS)
             for random_user in random_users:
                 example_inds = user_ind_dict[random_user]
-                random_example_inds = random.sample(example_inds, n_examples_user_j//N_RANDOM_USERS)
+                random_example_inds = random.sample(example_inds, n_examples_user_j // N_RANDOM_USERS)
                 random_example_inds.sort()
 
                 X_user_j = np.append(X_user_j, data_file[X_data_name][random_example_inds, :, :], axis=0)
@@ -155,6 +155,34 @@ def split_all_users(X_data_name, y_data_name, output_name, data_file, append_ran
 
         data_file.create_dataset(X_name_user_j, data=X_user_j, dtype=float)
         data_file.create_dataset(y_name_user_j, data=y_user_j, dtype=float)
+
+
+def split_all_users_single_dataset(X_data_name, y_data_name, output_name, data_file):
+    """
+    Split dataset into one per user, and write to data_file as a dataset with name
+    output_name containing an array of numpy objects (one for each user).
+    """
+
+    n_examples = data_file[X_data_name].shape[0]
+    n_users = data_file[y_data_name].shape[1]
+
+    # Find which examples belong to which user
+    print("Preparing split on users...")
+    user_ind_dict = {j: [] for j in range(n_users)}
+    for i in tqdm(range(n_examples)):
+        j = utils.one_hot_to_index(data_file[y_data_name][i, :])
+        user_ind_dict[j].append(i)
+
+    # Extract the data for each user (append randoms if specified)
+    data = []
+    print("Splitting into one dataset per user...")
+    for j in tqdm(range(n_users)):
+        X_user_j = data_file[X_data_name][user_ind_dict[j], :, :]
+        data.append(X_user_j)
+
+    # Write to file
+    special_dtype = h5py.special_dtype(vlen=np.dtype('float32'))
+    data_file.create_dataset(output_name, data=np.asarray(data), dtype=special_dtype)
 
 
 def parse_args(args):
@@ -323,21 +351,8 @@ def main():
         # Generate validation triplets
         generate_triplets.create_triplets(args, "X_valid", "y_valid", output_name="valid", n_examples_per_anchor=10, data_file=data_file)
 
-        # Create datasets for triplet test data
-        data_file.create_dataset("X_test_anchors", shape=(0, args.example_length, FEATURE_LENGTH),
-                                 maxshape=(None, args.example_length, FEATURE_LENGTH), dtype=float)
-        data_file.create_dataset("y_test_anchors", shape=(0, n_users), maxshape=(None, n_users), dtype=float)
-
-        data_file.create_dataset("X_test_positives", shape=(0, args.example_length, FEATURE_LENGTH),
-                                 maxshape=(None, args.example_length, FEATURE_LENGTH), dtype=float)
-        data_file.create_dataset("y_test_positives", shape=(0, n_users), maxshape=(None, n_users), dtype=float)
-
-        data_file.create_dataset("X_test_negatives", shape=(0, args.example_length, FEATURE_LENGTH),
-                                 maxshape=(None, args.example_length, FEATURE_LENGTH), dtype=float)
-        data_file.create_dataset("y_test_negatives", shape=(0, n_users), maxshape=(None, n_users), dtype=float)
-
-        # Generate test triplets
-        generate_triplets.create_triplets(args, "X_test", "y_test", output_name="test", n_examples_per_anchor=100, data_file=data_file)
+        # Split test by user into matrix
+        split_all_users_single_dataset("X_test", "y_test", "X_test_separated", data_file)
 
     print("\nExample generation successful!")
     print("Datasets are saved in: {}".format(args.output_path + data_file_name))

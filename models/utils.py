@@ -67,6 +67,28 @@ class DataGenerator(keras.utils.Sequence):
         return [X_anchors, X_positives, X_negatives], y_dummy
 
 
+def load_X(data_path, dataset_name):
+    """
+    Loads the dataset with name:
+
+    X_{dataset_name}
+
+    from the hdf5 file specified by data_path.
+
+    These datasets can be generated with the scripts generate_examples.py
+    and generate_triplets.py, in preprocessing/
+    """
+
+    if not os.path.isfile(data_path):
+        print("The file {} does not exist".format(data_path))
+        exit()
+
+    data_file = h5py.File(data_path, "r")
+    X = data_file["X_" + dataset_name][()]
+
+    return X
+
+
 def load_examples(data_path, dataset_name):
     """
     Loads the datasets with names:
