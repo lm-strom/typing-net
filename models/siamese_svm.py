@@ -72,6 +72,38 @@ def accuracy_FAR_FRR(y_true, y_pred):
     return accuracy, FAR, FRR
 
 
+def ensemble_accuracy_FAR_FRR(y_true, y_pred, ensemble_size):
+
+    n_examples = y_true.shape[0]
+    n_actual_examples = len(range(0, n_examples, 9))
+
+    correct = 0
+    FAR_errors = 0
+    FRR_errors = 0
+    for i in range(0, n_examples - ensemble_size, ensemble_size - 1):
+
+        sum = 0
+        for ii in range(ensemble_size - 1):
+            sum += y_pred[i + ii]
+
+        y_pred[i] = int(sum > (ensemble_size // 2))
+
+        if y_true[i] == y_pred[i]:
+            correct += 1
+
+        elif y_true[i] == 0 and y_pred[i] == 1:
+            FAR_errors += 1
+
+        elif y_true[i] == 1 and y_pred[i] == 0:
+            FRR_errors += 1
+
+    accuracy = float(correct) / n_actual_examples
+    FAR = float(FAR_errors) / (n_actual_examples - int(np.sum(y_true) / (ensemble_size - 1)))
+    FRR = float(FRR_errors) / int(np.sum(y_true) / (ensemble_size - 1))
+
+    return accuracy, FAR, FRR
+
+
 def parse_args(args):
     """
     Checks that input args are valid.
@@ -86,6 +118,9 @@ def parse_args(args):
         else:
             args.read_batches = False
 
+    args.ensemble = int(args.ensemble)
+    assert args.ensemble <= 100, "Invalid ensemble value. Cannot have an ensemble > 100."
+
 
 def main():
 
@@ -93,6 +128,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(dest="triplets_path", metavar="TRIPLETS_PATH", help="Path to read triplets from.")
     parser.add_argument(dest="model_path", metavar="MODEL_PATH", help="Path to read model from.")
+    parser.add_argument("-e", "--ensemble", metavar="ENSEMBLE", default=1, help="How many examples to ensemble when predicting. Default: 1")
     parser.add_argument("-b", "--read_batches", metavar="READ_BATCHES", default=False, help="If true, data is read incrementally in batches during training.")
     args = parser.parse_args()
     parse_args(args)
@@ -123,15 +159,6 @@ def main():
         X_train_1, X_train_0 = pair_distance_model.predict([X_train_anchors, X_train_positives, X_train_negatives])
         X_valid_1, X_valid_0 = pair_distance_model.predict([X_valid_anchors, X_valid_positives, X_valid_negatives])
 
-    else:  # Read data in batches
-
-        training_batch_generator = utils.DataGenerator(args.triplets_path, "train", batch_size=100, stop_after_batch=10)
-        validation_batch_generator = utils.DataGenerator(args.triplets_path, "valid", batch_size=1000)
-
-        # Get abs(distance) of embeddings (one batch at a time)
-        X_train_1, X_train_0 = pair_distance_model.predict_generator(generator=training_batch_generator, verbose=1)
-        X_valid_1, X_valid_0 = pair_distance_model.predict_generator(generator=validation_batch_generator, verbose=1)
-
     # Stack positive and negative examples
     X_train = np.vstack((X_train_1, X_train_0))
     y_train = np.hstack((np.ones(X_train_1.shape[0], ), np.zeros(X_train_0.shape[0],)))
@@ -140,7 +167,6 @@ def main():
 
     # Shuffle the data
     X_train, y_train = shuffle(X_train, y_train)
-    X_valid, y_valid = shuffle(X_valid, y_valid)
 
     # Train SVM
     clf = svm.SVC(gamma='scale', verbose=True)
@@ -148,8 +174,14 @@ def main():
 
     # Evaluate SVM
     y_pred = clf.predict(X_valid)
-    accuracy, FAR, FRR = accuracy_FAR_FRR(y_valid, y_pred)
-    print("\n\n---- Validation Results ----")
+
+    if args.ensemble > 1:
+        accuracy, FAR, FRR = ensemble_accuracy_FAR_FRR(y_valid, y_pred, args.ensemble)
+        print("\n\n---- Validation Results. With ensembling = {}. ----".format(args.ensemble))
+    else:
+        accuracy, FAR, FRR = accuracy_FAR_FRR(y_valid, y_pred)
+        print("\n\n---- Validation Results. No ensembling. ----")
+
     print("Accuracy = {}".format(accuracy))
     print("FAR = {}".format(FAR))
     print("FRR = {}".format(FRR))

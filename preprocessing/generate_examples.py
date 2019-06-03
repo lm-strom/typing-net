@@ -305,7 +305,7 @@ def main():
         data_file.create_dataset("y_train_negatives", shape=(0, n_users), maxshape=(None, n_users), dtype=float)
 
         # Generate training triplets
-        generate_triplets.create_triplets(args, "X_train", "y_train", output_name="train", n_examples_per_anchor=2, data_file=data_file)
+        generate_triplets.create_triplets(args, "X_train", "y_train", output_name="train", n_examples_per_anchor=10, data_file=data_file)
 
         # Create datasets for triplet validation data
         data_file.create_dataset("X_valid_anchors", shape=(0, args.example_length, FEATURE_LENGTH),
@@ -321,7 +321,7 @@ def main():
         data_file.create_dataset("y_valid_negatives", shape=(0, n_users), maxshape=(None, n_users), dtype=float)
 
         # Generate validation triplets
-        generate_triplets.create_triplets(args, "X_valid", "y_valid", output_name="valid", n_examples_per_anchor=10, data_file=data_file)
+        generate_triplets.create_triplets(args, "X_valid", "y_valid", output_name="valid", n_examples_per_anchor=100, data_file=data_file)
 
     print("\nExample generation successful!")
     print("Datasets are saved in: {}".format(args.output_path + data_file_name))
