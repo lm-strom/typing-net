@@ -75,7 +75,7 @@ def accuracy_FAR_FRR(y_true, y_pred):
 def ensemble_accuracy_FAR_FRR(y_true, y_pred, ensemble_size):
 
     n_examples = y_true.shape[0]
-    n_actual_examples = len(range(0, n_examples, 9))
+    n_actual_examples = len(range(0, n_examples, ensemble_size - 1))
 
     correct = 0
     FAR_errors = 0
