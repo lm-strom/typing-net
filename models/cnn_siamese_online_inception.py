@@ -19,6 +19,7 @@ from keras.models import Model
 from keras.layers import Dense, Input, Lambda, Activation
 from keras.layers import Conv1D, MaxPooling1D, Flatten
 from keras.layers.normalization import BatchNormalization
+from keras import regularizers
 from keras.activations import relu
 from keras.optimizers import Adam
 from keras.callbacks import Callback, ModelCheckpoint
@@ -31,7 +32,7 @@ PERIOD = 10
 
 # Parameters
 ALPHA = 0.3  # Triplet loss threshold
-LEARNING_RATE = 0.1e-2
+LEARNING_RATE = 0.5e-2
 LR_DROP = 0.5  # Learning rate multiplier every LR_DROP_INTERVAL
 LR_DROP_INTERVAL = 20  # How many epochs to run before dropping learning rate
 EPOCHS = 1000
@@ -342,10 +343,6 @@ def _triplet_distance(vects):
     return K.maximum(_euclidean_distance([A, P]) - _euclidean_distance([A, N]) + ALPHA, 0.0)
 
 
-def relu_clipped(x):
-    return relu(x, max_value=1000)
-
-
 def build_tower_cnn_model(input_shape):
     """
     Builds a CNN-model for embedding single examples of data.
@@ -353,16 +350,18 @@ def build_tower_cnn_model(input_shape):
 
     x0 = Input(input_shape, name='Input')
 
-    kernel = 5
-    n_channels = [24]
     x = x0
-    for i in range(len(n_channels)):
-        x = Conv1D(n_channels[i], kernel_size=kernel, strides=2, padding='same')(x)
-        x = BatchNormalization()(x)
-        x = Activation("relu")(x)
-        x = MaxPooling1D(5)(x)
 
+    tower_1 = Conv1D(8, 3, padding='same', activation='relu')(x)
+    tower_2 = Conv1D(8, 5, padding='same', activation='relu')(x)
+    tower_3 = MaxPooling1D(3, strides=1, padding='same')(x)
+    tower_3 = Conv1D(8, 1, padding='same', activation='relu')(tower_3)
+
+    x = keras.layers.concatenate([tower_1, tower_2, tower_3], axis = 2)
+    x = BatchNormalization()(x)
+    x = Activation("relu")(x)
     x = Flatten()(x)
+
     y = Dense(EMB_SIZE, name='dense_encoding')(x)
     y = Lambda(lambda x: K.l2_normalize(x, axis=1))(y)
 
