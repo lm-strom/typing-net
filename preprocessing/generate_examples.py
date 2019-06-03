@@ -13,7 +13,7 @@ import utils
 import generate_triplets
 
 # Constants
-FEATURE_LENGTH = 6
+FEATURE_LENGTH = 5
 
 
 def create_examples(input_path, data_file, example_length):
@@ -138,12 +138,12 @@ def split_all_users(X_data_name, y_data_name, output_name, data_file, append_ran
         n_examples_user_j = X_user_j.shape[0]
         y_user_j = np.ones((n_examples_user_j,))
 
-        N_RANDOM_USERS = n_users//2
+        N_RANDOM_USERS = n_users // 2
         if append_randoms:
             random_users = random.sample(list(range(j)) + list(range(j + 1, n_users)), N_RANDOM_USERS)
             for random_user in random_users:
                 example_inds = user_ind_dict[random_user]
-                random_example_inds = random.sample(example_inds, n_examples_user_j//N_RANDOM_USERS)
+                random_example_inds = random.sample(example_inds, n_examples_user_j // N_RANDOM_USERS)
                 random_example_inds.sort()
 
                 X_user_j = np.append(X_user_j, data_file[X_data_name][random_example_inds, :, :], axis=0)
@@ -155,6 +155,28 @@ def split_all_users(X_data_name, y_data_name, output_name, data_file, append_ran
 
         data_file.create_dataset(X_name_user_j, data=X_user_j, dtype=float)
         data_file.create_dataset(y_name_user_j, data=y_user_j, dtype=float)
+
+
+def split_all_users_multi_dataset(X_data_name, y_data_name, output_name, data_file):
+    """
+    Split dataset into one per user, and write to one dataset each.
+    """
+
+    n_examples = data_file[X_data_name].shape[0]
+    n_users = data_file[y_data_name].shape[1]
+
+    # Find which examples belong to which user
+    print("Preparing split on users...")
+    user_ind_dict = {j: [] for j in range(n_users)}
+    for i in tqdm(range(n_examples)):
+        j = utils.one_hot_to_index(data_file[y_data_name][i, :])
+        user_ind_dict[j].append(i)
+
+    # Extract the data for each user (append randoms if specified)
+    print("Splitting into one dataset per user...")
+    for j in tqdm(range(n_users)):
+        X_user_j = data_file[X_data_name][user_ind_dict[j], :, :]
+        data_file.create_dataset(output_name + "_" + str(j), data=X_user_j)  # Write to file
 
 
 def parse_args(args):
@@ -305,7 +327,7 @@ def main():
         data_file.create_dataset("y_train_negatives", shape=(0, n_users), maxshape=(None, n_users), dtype=float)
 
         # Generate training triplets
-        generate_triplets.create_triplets(args, "X_train", "y_train", output_name="train", n_examples_per_anchor=2, data_file=data_file)
+        generate_triplets.create_triplets(args, "X_train", "y_train", output_name="train", n_examples_per_anchor=10, data_file=data_file)
 
         # Create datasets for triplet validation data
         data_file.create_dataset("X_valid_anchors", shape=(0, args.example_length, FEATURE_LENGTH),
@@ -322,6 +344,9 @@ def main():
 
         # Generate validation triplets
         generate_triplets.create_triplets(args, "X_valid", "y_valid", output_name="valid", n_examples_per_anchor=10, data_file=data_file)
+
+        # Split test by user into matrix
+        split_all_users_multi_dataset("X_test", "y_test", "X_test", data_file)
 
     print("\nExample generation successful!")
     print("Datasets are saved in: {}".format(args.output_path + data_file_name))

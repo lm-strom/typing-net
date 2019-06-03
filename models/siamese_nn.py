@@ -2,14 +2,22 @@ import os
 import argparse
 
 import numpy as np
-from sklearn import svm
 from keras.models import load_model, Model
-from keras.layers import Input, Lambda
+from keras.layers import Input, Lambda, Dense, Dropout
+from keras.models import Sequential
 from keras.utils import CustomObjectScope
+from keras import optimizers
 import keras.backend as K
+
 
 import utils
 import cnn_siamese_online
+
+# Hyperparameters
+LEARNING_RATE = 1e-2
+BATCH_SIZE = 10000
+EPOCHS = 100
+DROPOUT_RATE = 0.2
 
 
 def build_pair_distance_model(tower_model, input_shape):
@@ -50,18 +58,43 @@ def shuffle(X, y):
 def accuracy_FAR_FRR(y_true, y_pred):
 
     n_examples = y_true.shape[0]
+
+    correct = 0
+    FAR_errors = 0
+    FRR_errors = 0
+    for i in range(n_examples):
+
+        if y_true[i] == np.round(y_pred[i]):
+            correct += 1
+
+        elif y_true[i] == 0 and np.round(y_pred[i]) == 1:
+            FAR_errors += 1
+
+        elif y_true[i] == 1 and np.round(y_pred[i]) == 0:
+            FRR_errors += 1
+
+    accuracy = float(correct) / n_examples
+    FAR = float(FAR_errors) / (n_examples - np.sum(y_true))
+    FRR = float(FRR_errors) / np.sum(y_true)
+
+    return accuracy, FAR, FRR
+
+
+def ensemble_accuracy_FAR_FRR(y_true, y_pred, ensemble_size):
+
+    n_examples = y_true.shape[0]
     n_actual_examples = len(range(0, n_examples, 9))
 
     correct = 0
     FAR_errors = 0
     FRR_errors = 0
-    for i in range(0, n_examples - 10, 9):
+    for i in range(0, n_examples - ensemble_size, ensemble_size - 1):
 
         sum = 0
-        for ii in range(9):
-            sum += y_pred[i + ii]
+        for ii in range(ensemble_size - 1):
+            sum += np.round(y_pred[i + ii])
 
-        y_pred[i] = int(sum > 4)
+        y_pred[i] = int(sum > (ensemble_size // 2))
 
         if y_true[i] == y_pred[i]:
             correct += 1
@@ -73,10 +106,24 @@ def accuracy_FAR_FRR(y_true, y_pred):
             FRR_errors += 1
 
     accuracy = float(correct) / n_actual_examples
-    FAR = float(FAR_errors) / (n_actual_examples - int(np.sum(y_true) / 9))
-    FRR = float(FRR_errors) / int(np.sum(y_true) / 9)
+    FAR = float(FAR_errors) / (n_actual_examples - int(np.sum(y_true) / (ensemble_size - 1)))
+    FRR = float(FRR_errors) / int(np.sum(y_true) / (ensemble_size - 1))
 
     return accuracy, FAR, FRR
+
+
+def build_nn_model(input_shape):
+    """
+    Builds a neural network classifier model.
+    """
+
+    model = Sequential()
+
+    model.add(Dense(32, activation="relu"))
+    model.add(Dropout(rate=DROPOUT_RATE))
+    model.add(Dense(1, activation="sigmoid"))
+
+    return model
 
 
 def parse_args(args):
@@ -87,11 +134,8 @@ def parse_args(args):
     assert os.path.isfile(args.triplets_path), "The specified triplet file does not exist."
     assert os.path.isfile(args.model_path), "The specified model file does not exist."
 
-    if args.read_batches is not False:
-        if args.read_batches.lower() in ("y", "yes", "1", "", "true", "t"):
-            args.read_batches = True
-        else:
-            args.read_batches = False
+    args.ensemble = int(args.ensemble)
+    assert args.ensemble <= 100, "Invalid ensemble value. Cannot have an ensemble > 100."
 
 
 def main():
@@ -100,6 +144,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(dest="triplets_path", metavar="TRIPLETS_PATH", help="Path to read triplets from.")
     parser.add_argument(dest="model_path", metavar="MODEL_PATH", help="Path to read model from.")
+    parser.add_argument("-e", "--ensemble", metavar="ENSEMBLE", default=1, help="How many examples to ensemble when predicting. Default: 1")
     parser.add_argument("-b", "--read_batches", metavar="READ_BATCHES", default=False, help="If true, data is read incrementally in batches during training.")
     args = parser.parse_args()
     parse_args(args)
@@ -125,39 +170,55 @@ def main():
         X_valid_anchors, _ = utils.load_examples(args.triplets_path, "valid_anchors")
         X_valid_positives, _ = utils.load_examples(args.triplets_path, "valid_positives")
         X_valid_negatives, _ = utils.load_examples(args.triplets_path, "valid_negatives")
-
+        X_test_anchors, _ = utils.load_examples(args.triplets_path, "test_anchors")
+        X_test_positives, _ = utils.load_examples(args.triplets_path, "test_positives")
+        X_test_negatives, _ = utils.load_examples(args.triplets_path, "test_negatives")
 
         # Get abs(distance) of embeddings
         X_train_1, X_train_0 = pair_distance_model.predict([X_train_anchors, X_train_positives, X_train_negatives])
-
-        ii = 0
-        for i in range(X_valid_anchors.shape[0]):
-            X_valid_anchors[i,:,:] = X_valid_anchors[ii*10,:,:]
-
-            if i % 10 == 9:
-                ii += 1
-
         X_valid_1, X_valid_0 = pair_distance_model.predict([X_valid_anchors, X_valid_positives, X_valid_negatives])
+        X_test_1, X_test_0 = pair_distance_model.predict([X_test_anchors, X_test_positives, X_test_negatives])
 
+    else:  # Read data in batches
+
+        training_batch_generator = utils.DataGenerator(args.triplets_path, "train", batch_size=100, stop_after_batch=10)
+        valid_batch_generator = utils.DataGenerator(args.triplets_path, "valid", batch_size=1000)
+        test_batch_generator = utils.DataGenerator(args.triplets_path, "test", batch_size=1000)
+
+        # Get abs(distance) of embeddings (one batch at a time)
+        X_train_1, X_train_0 = pair_distance_model.predict_generator(generator=training_batch_generator, verbose=1)
+        X_valid_1, X_valid_0 = pair_distance_model.predict_generator(generator=valid_batch_generator, verbose=1)
+        X_test_1, X_test_0 = pair_distance_model.predict_generator(generator=test_batch_generator, verbose=1)
 
     # Stack positive and negative examples
     X_train = np.vstack((X_train_1, X_train_0))
     y_train = np.hstack((np.ones(X_train_1.shape[0], ), np.zeros(X_train_0.shape[0],)))
     X_valid = np.vstack((X_valid_1, X_valid_0))
     y_valid = np.hstack((np.ones(X_valid_1.shape[0], ), np.zeros(X_valid_0.shape[0],)))
+    X_test = np.vstack((X_test_1, X_test_0))
+    y_test = np.hstack((np.ones(X_test_1.shape[0], ), np.zeros(X_test_0.shape[0],)))
 
     # Shuffle the data
     X_train, y_train = shuffle(X_train, y_train)
-    #X_valid, y_valid = shuffle(X_valid, y_valid)
 
-    # Train SVM
-    clf = svm.SVC(gamma='scale', verbose=True)
-    clf.fit(X_train[:10000, :], y_train[:10000])
+    # Build neural net classifier
+    nn_model = build_nn_model(input_shape=X_train.shape[1:])
+    adam_optimizer = optimizers.Adam(lr=LEARNING_RATE)
+    nn_model.compile(loss="binary_crossentropy", optimizer=adam_optimizer, metrics=["accuracy"])
 
-    # Evaluate SVM
-    y_pred = clf.predict(X_valid)
-    accuracy, FAR, FRR = accuracy_FAR_FRR(y_valid, y_pred)
-    print("\n\n---- Validation Results ----")
+    # Train model
+    nn_model.fit(X_train, y_train, validation_data=(X_valid, y_valid), batch_size=BATCH_SIZE, epochs=EPOCHS)
+
+    # Evaluate model
+    y_pred = nn_model.predict(X_test)
+
+    if args.ensemble > 1:
+        accuracy, FAR, FRR = ensemble_accuracy_FAR_FRR(y_test, y_pred, args.ensemble)
+        print("\n\n---- Validation Results. With ensembling = {}. ----".format(args.ensemble))
+    else:
+        accuracy, FAR, FRR = accuracy_FAR_FRR(y_valid, y_pred)
+        print("\n\n---- Validation Results. No ensembling. ----")
+
     print("Accuracy = {}".format(accuracy))
     print("FAR = {}".format(FAR))
     print("FRR = {}".format(FRR))
