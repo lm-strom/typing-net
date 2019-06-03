@@ -19,6 +19,7 @@ from keras.models import Model
 from keras.layers import Dense, Input, Lambda, Activation
 from keras.layers import Conv1D, MaxPooling1D, Flatten
 from keras.layers.normalization import BatchNormalization
+from keras.activations import relu
 from keras.optimizers import Adam
 from keras.callbacks import Callback, ModelCheckpoint
 import keras.backend as K
@@ -35,6 +36,8 @@ LR_DROP = 0.5  # Learning rate multiplier every LR_DROP_INTERVAL
 LR_DROP_INTERVAL = 20  # How many epochs to run before dropping learning rate
 EPOCHS = 1000
 BATCH_SIZE = 100
+REG_WEIGHT = 0.0  # Regularization multiplier
+EMB_SIZE = 40  # Embedding size
 
 # Global variables
 stop_flag = False  # Flag to indicate that training was terminated early
@@ -360,8 +363,8 @@ def build_tower_cnn_model(input_shape):
         x = MaxPooling1D(5)(x)
 
     x = Flatten()(x)
-    y = Dense(40, name='dense_encoding')(x)
-    y = Lambda(lambda  x: K.l2_normalize(x,axis=1))(y)
+    y = Dense(EMB_SIZE, name='dense_encoding')(x)
+    y = Lambda(lambda x: K.l2_normalize(x, axis=1))(y)
 
     model = Model(inputs=x0, outputs=y)
 
@@ -383,15 +386,24 @@ def build_triplet_model(input_shape, tower_model):
     x_B = tower_model(input_B)
     x_C = tower_model(input_C)
 
-    distance = Lambda(_triplet_distance, output_shape=_eucl_dist_output_shape)([x_A, x_B, x_C])
+    triplet_loss = Lambda(_triplet_distance, output_shape=_eucl_dist_output_shape)([x_A, x_B, x_C])
 
-    model = Model([input_A, input_B, input_C], distance, name='siamese')
+    # For global orthogonal regularization
+    anchor_negative_dots = Lambda(lambda x: K.batch_dot(x[0], x[1], axes=1))([x_A, x_C])
+    M1 = Lambda(lambda x: K.mean(x))(anchor_negative_dots)
+    M2 = Lambda(lambda x: K.mean(K.square(x)))(anchor_negative_dots)
+    reg_loss = Lambda(lambda x: K.square(x[0]) + K.maximum(0.0, x[1] - 1.0 / EMB_SIZE))([M1, M2])
+
+    # Weighted total loss
+    loss = Lambda(lambda x: x[0] + REG_WEIGHT * x[1])([triplet_loss, reg_loss])
+
+    model = Model([input_A, input_B, input_C], loss, name='siamese')
 
     return model
 
 
 def custom_loss(y_true, y_pred):
-    return y_pred
+    return K.mean(y_pred)
 
 
 def parse_args(args):
