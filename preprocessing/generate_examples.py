@@ -321,7 +321,23 @@ def main():
         data_file.create_dataset("y_valid_negatives", shape=(0, n_users), maxshape=(None, n_users), dtype=float)
 
         # Generate validation triplets
-        generate_triplets.create_triplets(args, "X_valid", "y_valid", output_name="valid", n_examples_per_anchor=100, data_file=data_file)
+        generate_triplets.create_triplets(args, "X_valid", "y_valid", output_name="valid", n_examples_per_anchor=10, data_file=data_file)
+
+        # Create datasets for triplet test data
+        data_file.create_dataset("X_test_anchors", shape=(0, args.example_length, FEATURE_LENGTH),
+                                 maxshape=(None, args.example_length, FEATURE_LENGTH), dtype=float)
+        data_file.create_dataset("y_test_anchors", shape=(0, n_users), maxshape=(None, n_users), dtype=float)
+
+        data_file.create_dataset("X_test_positives", shape=(0, args.example_length, FEATURE_LENGTH),
+                                 maxshape=(None, args.example_length, FEATURE_LENGTH), dtype=float)
+        data_file.create_dataset("y_test_positives", shape=(0, n_users), maxshape=(None, n_users), dtype=float)
+
+        data_file.create_dataset("X_test_negatives", shape=(0, args.example_length, FEATURE_LENGTH),
+                                 maxshape=(None, args.example_length, FEATURE_LENGTH), dtype=float)
+        data_file.create_dataset("y_test_negatives", shape=(0, n_users), maxshape=(None, n_users), dtype=float)
+
+        # Generate test triplets
+        generate_triplets.create_triplets(args, "X_test", "y_test", output_name="test", n_examples_per_anchor=100, data_file=data_file)
 
     print("\nExample generation successful!")
     print("Datasets are saved in: {}".format(args.output_path + data_file_name))

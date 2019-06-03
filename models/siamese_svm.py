@@ -151,19 +151,19 @@ def main():
         X_train_anchors, _ = utils.load_examples(args.triplets_path, "train_anchors")
         X_train_positives, _ = utils.load_examples(args.triplets_path, "train_positives")
         X_train_negatives, _ = utils.load_examples(args.triplets_path, "train_negatives")
-        X_valid_anchors, _ = utils.load_examples(args.triplets_path, "valid_anchors")
-        X_valid_positives, _ = utils.load_examples(args.triplets_path, "valid_positives")
-        X_valid_negatives, _ = utils.load_examples(args.triplets_path, "valid_negatives")
+        X_test_anchors, _ = utils.load_examples(args.triplets_path, "test_anchors")
+        X_test_positives, _ = utils.load_examples(args.triplets_path, "test_positives")
+        X_test_negatives, _ = utils.load_examples(args.triplets_path, "test_negatives")
 
         # Get abs(distance) of embeddings
         X_train_1, X_train_0 = pair_distance_model.predict([X_train_anchors, X_train_positives, X_train_negatives])
-        X_valid_1, X_valid_0 = pair_distance_model.predict([X_valid_anchors, X_valid_positives, X_valid_negatives])
+        X_test_1, X_test_0 = pair_distance_model.predict([X_test_anchors, X_test_positives, X_test_negatives])
 
     # Stack positive and negative examples
     X_train = np.vstack((X_train_1, X_train_0))
     y_train = np.hstack((np.ones(X_train_1.shape[0], ), np.zeros(X_train_0.shape[0],)))
-    X_valid = np.vstack((X_valid_1, X_valid_0))
-    y_valid = np.hstack((np.ones(X_valid_1.shape[0], ), np.zeros(X_valid_0.shape[0],)))
+    X_test = np.vstack((X_test_1, X_test_0))
+    y_test = np.hstack((np.ones(X_test_1.shape[0], ), np.zeros(X_test_0.shape[0],)))
 
     # Shuffle the data
     X_train, y_train = shuffle(X_train, y_train)
@@ -173,13 +173,13 @@ def main():
     clf.fit(X_train[:10000, :], y_train[:10000])
 
     # Evaluate SVM
-    y_pred = clf.predict(X_valid)
+    y_pred = clf.predict(X_test)
 
     if args.ensemble > 1:
-        accuracy, FAR, FRR = ensemble_accuracy_FAR_FRR(y_valid, y_pred, args.ensemble)
+        accuracy, FAR, FRR = ensemble_accuracy_FAR_FRR(y_test, y_pred, args.ensemble)
         print("\n\n---- Validation Results. With ensembling = {}. ----".format(args.ensemble))
     else:
-        accuracy, FAR, FRR = accuracy_FAR_FRR(y_valid, y_pred)
+        accuracy, FAR, FRR = accuracy_FAR_FRR(y_test, y_pred)
         print("\n\n---- Validation Results. No ensembling. ----")
 
     print("Accuracy = {}".format(accuracy))
