@@ -108,8 +108,9 @@ def ensemble_accuracy_FAR_FRR(pair_distance_model, svm_model, X_test_separated, 
 
         # Reformat data for prediction
         anchors = np.tile(anchor.T, ensemble_size).T
-        positives = np.squeeze(np.array(positives))
-        negatives = np.squeeze(np.array(negatives))
+        positives = np.squeeze(np.array(positives), axis=1)
+        negatives = np.squeeze(np.array(negatives), axis=1)
+
 
         # Predict
         AP_dists, AN_dists = pair_distance_model.predict([anchors, positives, negatives])
@@ -218,7 +219,7 @@ def main():
 
     # Train SVM
     svm_model = svm.SVC(gamma='scale', verbose=True)
-    svm_model.fit(X_train[:10000, :], y_train[:10000])
+    svm_model.fit(X_train[:20000, :], y_train[:20000])
 
     # Load test data
     _, y_test_shape = utils.get_shapes(args.triplets_path, "test")
