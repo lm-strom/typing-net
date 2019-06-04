@@ -288,6 +288,7 @@ def main():
 
     else:  # if fixed threshold = 0.5
 
+        random.seed(1)
         accuracy, FAR, FRR = predict_and_evaluate(pair_distance_model, svm_model, X_test_separated,
                                                   args.ensemble_size, args.ensemble_type, threshold=0.5, probability=False)
 
