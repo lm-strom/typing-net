@@ -13,7 +13,8 @@ import utils
 import cnn_siamese
 
 # Parameters
-FRR_FAR_DISCRETE = 0.05
+THRESH_STEP = 0.05  # step size when sweeping threshold
+N_TRIALS = 50  # number of acceptance/rejection trials to do per example
 
 
 def build_pair_distance_model(tower_model, input_shape):
@@ -132,13 +133,14 @@ def predict_and_evaluate(pair_distance_model, svm_model, X_test_separated, ensem
     # Evaluate
     n_FA_tot, n_FR_tot, n_correct_tot = 0, 0, 0
     n_trials_tot = 0
-    for user in range(n_users):
-        n_FA, n_FR, n_correct, n_trials = ensemble_accuracy_FAR_FRR(pair_distance_model, svm_model, X_test_separated, user,
-                                                                    ensemble_size, ensemble_type, threshold)
-        n_FA_tot += n_FA
-        n_FR_tot += n_FR
-        n_correct_tot += n_correct
-        n_trials_tot += n_trials
+    for i in range(N_TRIALS):
+        for user in range(n_users):
+            n_FA, n_FR, n_correct, n_trials = ensemble_accuracy_FAR_FRR(pair_distance_model, svm_model, X_test_separated, user,
+                                                                        ensemble_size, ensemble_type, threshold)
+            n_FA_tot += n_FA
+            n_FR_tot += n_FR
+            n_correct_tot += n_correct
+            n_trials_tot += n_trials
 
     accuracy = float(n_correct_tot) / (2 * n_trials_tot)
     FAR = float(n_FA_tot) / n_trials_tot
@@ -234,8 +236,7 @@ def main():
         min_diff = float("inf")
         FAR_EER, FRR_EER = 1, 1
         accuracy_ERR = 0
-        for threshold in np.arange(0, 1, FRR_FAR_DISCRETE):
-            random.seed(1)
+        for threshold in np.arange(0, 1, THRESH_STEP):
             accuracy, FAR, FRR = predict_and_evaluate(pair_distance_model, svm_model, X_test_separated,
                                                       args.ensemble_size, args.ensembe_type, threshold)
             FARs.append(FAR)
@@ -261,7 +262,6 @@ def main():
 
     else:  # if fixed threshold = 0.5
 
-        random.seed(1)
         accuracy, FAR, FRR = predict_and_evaluate(pair_distance_model, svm_model, X_test_separated,
                                                   args.ensemble_size, args.ensemble_type, threshold=0.5)
 
