@@ -11,7 +11,7 @@ from keras.utils import CustomObjectScope
 import keras.backend as K
 
 import utils
-import cnn_siamese_online
+import cnn_siamese
 
 # Parameters
 FRR_FAR_DISCRETE = 0.05
@@ -188,8 +188,8 @@ def main():
     parse_args(args)
 
     # Load model
-    with CustomObjectScope({'_euclidean_distance': cnn_siamese_online._euclidean_distance,
-                            'ALPHA': cnn_siamese_online.ALPHA, "relu_clipped": cnn_siamese_online.relu_clipped}):
+    with CustomObjectScope({'_euclidean_distance': cnn_siamese._euclidean_distance,
+                            'ALPHA': cnn_siamese.ALPHA}):
         tower_model = load_model(args.model_path)
         tower_model.compile(optimizer='adam', loss='mean_squared_error')  # Model was previously not compiled
 
@@ -229,14 +229,14 @@ def main():
         X_test_separated.append(X_test_j)
 
     # Predict and evaluate
-    if args.sweep:
+    if args.sweep: # if sweeping the threshold
 
         FARs, FRRs = [], []
         min_diff = float("inf")
         FAR_EER, FRR_EER = 1, 1
         accuracy_ERR = 0
         for threshold in np.arange(0, 1, FRR_FAR_DISCRETE):
-            np.random.seed(1)
+            random.seed(1)
             accuracy, FAR, FRR = predict_and_evaluate(pair_distance_model, svm_model, X_test_separated,
                                                       args.ensemble_size, args.ensembe_type, threshold)
             FARs.append(FAR)
@@ -260,8 +260,9 @@ def main():
         plt.ylabel("FRR")
         plt.savefig("FRR_FAR.pdf")
 
-    else:
+    else: # if fixed threshold = 0.5
 
+        random.seed(1)
         accuracy, FAR, FRR = predict_and_evaluate(pair_distance_model, svm_model, X_test_separated,
                                                   args.ensemble_size, args.ensemble_type, threshold=0.5)
 
