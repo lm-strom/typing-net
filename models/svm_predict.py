@@ -1,6 +1,7 @@
 import os
 import argparse
 import random
+import pickle
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -14,7 +15,7 @@ import cnn_siamese
 
 # Parameters
 THRESH_STEP = 0.05  # step size when sweeping threshold
-N_TRIALS = 50  # number of acceptance/rejection trials to do per example
+N_TRIALS = 100  # number of acceptance/rejection trials to do per example
 
 
 def build_pair_distance_model(tower_model, input_shape):
@@ -94,8 +95,8 @@ def ensemble_accuracy_FAR_FRR(pair_distance_model, svm_model, X_test_separated, 
         AP_dists, AN_dists = pair_distance_model.predict([anchors, positives, negatives])
 
         if ensemble_type == "majority":  # Predict on all dists separately and majority vote
-            AP_dists = np.abs(AP_dists)
-            AN_dists = np.abs(AN_dists)
+            AP_dists = AP_dists  # np.abs(AP_dists)
+            AN_dists = AN_dists  # np.abs(AN_dists)
             y_pos_preds = svm_model.predict_proba(AP_dists)[0, 1]
             y_neg_preds = svm_model.predict_proba(AN_dists)[0, 1]
             y_pos_pred = (np.median(y_pos_preds) >= threshold)
@@ -157,12 +158,6 @@ def parse_args(args):
     assert os.path.isfile(args.triplets_path), "The specified triplet file does not exist."
     assert os.path.isfile(args.model_path), "The specified model file does not exist."
 
-    if args.read_batches is not False:
-        if args.read_batches.lower() in ("y", "yes", "1", "", "true", "t"):
-            args.read_batches = True
-        else:
-            args.read_batches = False
-
     if args.sweep is not False:
         if args.sweep.lower() in ("y", "yes", "1", "", "true", "t"):
             args.sweep = True
@@ -171,8 +166,12 @@ def parse_args(args):
 
     args.ensemble_size = int(args.ensemble_size)
     assert args.ensemble_size <= 100, "Invalid ensemble value. Cannot have an ensemble > 100."
-
     assert args.ensemble_type in ["majority", "average"], "Invalid ensembling type. Choose between majority and average."
+
+    if args.save_model_path is not None:
+        assert os.path.isdir(args.save_model_path), "Save model path does not exist."
+    if args.load_model_path is not None:
+        assert os.path.isfile(args.load_model_path), "Model to load does not exist."
 
 
 def main():
@@ -183,12 +182,13 @@ def main():
     parser.add_argument(dest="model_path", metavar="MODEL_PATH", help="Path to read model from.")
     parser.add_argument("-eS", "--ensemble_size", metavar="ENSEMBLE_SIZE", default=1, help="How many examples to ensemble when predicting. Default: 1")
     parser.add_argument("-eT", "--ensemble_type", metavar="ENSEMBLE_TYPE", default="majority", help="Choices: majority, average. Default: majority.")
+    parser.add_argument("-sM", "--save_model_path", metavar="SAVE_MODEL_PATH", default=None, help="Path to save trained svm model.")
+    parser.add_argument("-l", "--load_model_path", metavar="LOAD_MODEL_PATH", default=None, help="Path to load trained svm model from. If not supplied, a new model is trained.")
     parser.add_argument("-s", "--sweep", metavar="SWEEP", default=False, help="If true, evaluation threshold is sweeped and plot of FRR vs FAR is saved.")
-    parser.add_argument("-b", "--read_batches", metavar="READ_BATCHES", default=False, help="If true, data is read incrementally in batches during training.")
     args = parser.parse_args()
     parse_args(args)
 
-    # Load model
+    # Load tower model
     with CustomObjectScope({'_euclidean_distance': cnn_siamese._euclidean_distance,
                             'ALPHA': cnn_siamese.ALPHA}):
         tower_model = load_model(args.model_path)
@@ -200,7 +200,8 @@ def main():
     pair_distance_model = build_pair_distance_model(tower_model, X_shape[1:])
     pair_distance_model.compile(optimizer="adam", loss="mean_squared_error")  # Need to compile in order to predict
 
-    if not args.read_batches:  # Read all data at once
+    # If no svm model supplied, train ones
+    if args.load_model_path is None:
 
         # Load training triplets and validation triplets
         X_train_anchors, _ = utils.load_examples(args.triplets_path, "train_anchors")
@@ -210,16 +211,26 @@ def main():
         # Get abs(distance) of embeddings
         X_train_1, X_train_0 = pair_distance_model.predict([X_train_anchors, X_train_positives, X_train_negatives])
 
-    # Stack positive and negative examples
-    X_train = np.vstack((X_train_1, X_train_0))
-    y_train = np.hstack((np.ones(X_train_1.shape[0], ), np.zeros(X_train_0.shape[0],)))
+        # Stack positive and negative examples
+        X_train = np.vstack((X_train_1, X_train_0))
+        y_train = np.hstack((np.ones(X_train_1.shape[0], ), np.zeros(X_train_0.shape[0],)))
 
-    # Shuffle the data
-    X_train, y_train = shuffle(X_train, y_train)
+        # Shuffle the data
+        X_train, y_train = shuffle(X_train, y_train)
 
-    # Train SVM
-    svm_model = svm.SVC(gamma='scale', verbose=True, probability=True)
-    svm_model.fit(X_train[:20000, :], y_train[:20000])
+        # Train SVM
+        svm_model = svm.SVC(gamma='scale', verbose=True, probability=True)
+        svm_model.fit(X_train[:20000, :], y_train[:20000])
+
+        # Save svm model
+        if args.save_model_path is not None:
+            with open(args.save_model_path + "svm_model.pkl", "wb") as svm_file:
+                pickle.dump(svm_model, svm_file)
+
+    else:  # if svm model supplied
+
+        with open(args.load_model_path, "rb") as svm_file:
+            svm_model = pickle.load(svm_file)
 
     # Load test data
     _, y_test_shape = utils.get_shapes(args.triplets_path, "test")
