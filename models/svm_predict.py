@@ -3,6 +3,7 @@ import argparse
 import random
 
 import numpy as np
+import matplotlib.pyplot as plt
 from sklearn import svm
 from keras.models import load_model, Model
 from keras.layers import Input, Lambda
@@ -11,6 +12,9 @@ import keras.backend as K
 
 import utils
 import cnn_siamese_online
+
+# Parameters
+FRR_FAR_DISCRETE = 0.05
 
 
 def build_pair_distance_model(tower_model, input_shape):
@@ -48,32 +52,7 @@ def shuffle(X, y):
     return X, y
 
 
-def accuracy_FAR_FRR(y_true, y_pred):
-
-    n_examples = y_true.shape[0]
-
-    correct = 0
-    FAR_errors = 0
-    FRR_errors = 0
-    for i in range(n_examples):
-
-        if y_true[i] == y_pred[i]:
-            correct += 1
-
-        elif y_true[i] == 0 and y_pred[i] == 1:
-            FAR_errors += 1
-
-        elif y_true[i] == 1 and y_pred[i] == 0:
-            FRR_errors += 1
-
-    accuracy = float(correct) / n_examples
-    FAR = float(FAR_errors) / (n_examples - np.sum(y_true))
-    FRR = float(FRR_errors) / np.sum(y_true)
-
-    return accuracy, FAR, FRR
-
-
-def ensemble_accuracy_FAR_FRR(pair_distance_model, svm_model, X_test_separated, user, ensemble_size):
+def ensemble_accuracy_FAR_FRR(pair_distance_model, svm_model, X_test_separated, user, ensemble_size, threshold):
     """
     Compute ensemble accuracy, FAR and FRR
     """
@@ -111,13 +90,12 @@ def ensemble_accuracy_FAR_FRR(pair_distance_model, svm_model, X_test_separated, 
         positives = np.squeeze(np.array(positives), axis=1)
         negatives = np.squeeze(np.array(negatives), axis=1)
 
-
         # Predict
         AP_dists, AN_dists = pair_distance_model.predict([anchors, positives, negatives])
-        y_pos_preds = svm_model.predict(AP_dists)
-        y_neg_preds = svm_model.predict(AN_dists)
-        y_pos_pred = (np.sum(y_pos_preds) > (ensemble_size // 2))
-        y_neg_pred = (np.sum(y_neg_preds) > (ensemble_size // 2))
+        y_pos_preds = svm_model.predict_proba(AP_dists)[0, 1]
+        y_neg_preds = svm_model.predict_proba(AN_dists)[0, 1]
+        y_pos_pred = (np.median(y_pos_preds) >= threshold)
+        y_neg_pred = (np.median(y_neg_preds) >= threshold)
 
         # Evaluate
         if y_pos_pred == 1:
@@ -135,7 +113,7 @@ def ensemble_accuracy_FAR_FRR(pair_distance_model, svm_model, X_test_separated, 
     return n_FA, n_FR, n_correct, n_trials
 
 
-def predict_and_evaluate(pair_distance_model, svm_model, X_test_separated, ensemble_size):
+def predict_and_evaluate(pair_distance_model, svm_model, X_test_separated, ensemble_size, threshold):
     """
     Make predictions on X_test_separated (list of data per user)
     using pair_distance_model and svm_model, and ensembling of size ensemble_size.
@@ -146,7 +124,7 @@ def predict_and_evaluate(pair_distance_model, svm_model, X_test_separated, ensem
     n_FA_tot, n_FR_tot, n_correct_tot = 0, 0, 0
     n_trials_tot = 0
     for user in range(n_users):
-        n_FA, n_FR, n_correct, n_trials = ensemble_accuracy_FAR_FRR(pair_distance_model, svm_model, X_test_separated, user, ensemble_size)
+        n_FA, n_FR, n_correct, n_trials = ensemble_accuracy_FAR_FRR(pair_distance_model, svm_model, X_test_separated, user, ensemble_size, threshold)
         n_FA_tot += n_FA
         n_FR_tot += n_FR
         n_correct_tot += n_correct
@@ -173,6 +151,12 @@ def parse_args(args):
         else:
             args.read_batches = False
 
+    if args.sweep is not False:
+        if args.sweep.lower() in ("y", "yes", "1", "", "true", "t"):
+            args.sweep = True
+        else:
+            args.sweep = False
+
     args.ensemble = int(args.ensemble)
     assert args.ensemble <= 100, "Invalid ensemble value. Cannot have an ensemble > 100."
 
@@ -184,6 +168,7 @@ def main():
     parser.add_argument(dest="triplets_path", metavar="TRIPLETS_PATH", help="Path to read triplets from.")
     parser.add_argument(dest="model_path", metavar="MODEL_PATH", help="Path to read model from.")
     parser.add_argument("-e", "--ensemble", metavar="ENSEMBLE", default=1, help="How many examples to ensemble when predicting. Default: 1")
+    parser.add_argument("-s", "--sweep", metavar="SWEEP", default=False, help="If true, evaluation threshold is sweeped and plot of FRR vs FAR is saved.")
     parser.add_argument("-b", "--read_batches", metavar="READ_BATCHES", default=False, help="If true, data is read incrementally in batches during training.")
     args = parser.parse_args()
     parse_args(args)
@@ -218,7 +203,7 @@ def main():
     X_train, y_train = shuffle(X_train, y_train)
 
     # Train SVM
-    svm_model = svm.SVC(gamma='scale', verbose=True)
+    svm_model = svm.SVC(gamma='scale', verbose=True, probability=True)
     svm_model.fit(X_train[:20000, :], y_train[:20000])
 
     # Load test data
@@ -230,12 +215,44 @@ def main():
         X_test_separated.append(X_test_j)
 
     # Predict and evaluate
-    accuracy, FAR, FRR = predict_and_evaluate(pair_distance_model, svm_model, X_test_separated, args.ensemble)
+    if args.sweep:
 
-    print("\n---- Test Results ----")
-    print("Accuracy = {}".format(accuracy))
-    print("FAR = {}".format(FAR))
-    print("FRR = {}".format(FRR))
+        FARs, FRRs = [], []
+        min_diff = float("inf")
+        FAR_EER, FRR_EER = 1, 1
+        accuracy_ERR = 0
+        for threshold in np.arange(0, 1, FRR_FAR_DISCRETE):
+            np.random.seed(1)
+            accuracy, FAR, FRR = predict_and_evaluate(pair_distance_model, svm_model, X_test_separated, args.ensemble, threshold)
+            FARs.append(FAR)
+            FRRs.append(FRR)
+            if np.abs(FAR - FRR) < min_diff:
+                FAR_EER = FAR
+                FRR_EER = FRR
+                accuracy_ERR = accuracy
+                min_diff = np.abs(FAR - FRR)
+
+        # Report EER and corresponding accuracy
+        print("\n ---- Test Results: EER ----")
+        print("Accuracy = {}".format(accuracy_ERR))
+        print("FAR = {}".format(FAR_EER))
+        print("FRR = {}".format(FRR_EER))
+
+        # Plot FRR vs FAR
+        plt.figure()
+        plt.plot(FARs, FRRs)
+        plt.xlabel("FAR")
+        plt.ylabel("FRR")
+        plt.savefig("FRR_FAR.pdf")
+
+    else:
+
+        accuracy, FAR, FRR = predict_and_evaluate(pair_distance_model, svm_model, X_test_separated, args.ensemble, threshold=0.5)
+
+        print("\n---- Test Results ----")
+        print("Accuracy = {}".format(accuracy))
+        print("FAR = {}".format(FAR))
+        print("FRR = {}".format(FRR))
 
 
 if __name__ == "__main__":
