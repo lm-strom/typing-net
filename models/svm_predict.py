@@ -53,7 +53,8 @@ def shuffle(X, y):
     return X, y
 
 
-def ensemble_accuracy_FAR_FRR(pair_distance_model, svm_model, X_test_separated, user, ensemble_size, ensemble_type, threshold):
+def ensemble_accuracy_FAR_FRR(pair_distance_model, svm_model, X_test_separated, user,
+                              ensemble_size, ensemble_type, threshold, probability):
     """
     Compute ensemble accuracy, FAR and FRR
     """
@@ -95,18 +96,30 @@ def ensemble_accuracy_FAR_FRR(pair_distance_model, svm_model, X_test_separated, 
         AP_dists, AN_dists = pair_distance_model.predict([anchors, positives, negatives])
 
         if ensemble_type == "majority":  # Predict on all dists separately and majority vote
-            AP_dists = AP_dists  # np.abs(AP_dists)
-            AN_dists = AN_dists  # np.abs(AN_dists)
-            y_pos_preds = svm_model.predict_proba(AP_dists)[0, 1]
-            y_neg_preds = svm_model.predict_proba(AN_dists)[0, 1]
-            y_pos_pred = (np.median(y_pos_preds) >= threshold)
-            y_neg_pred = (np.median(y_neg_preds) >= threshold)
+            AP_dists = AP_dists
+            AN_dists = AN_dists
+
+            if probability:
+                y_pos_preds = svm_model.predict_proba(AP_dists)[0, 1]
+                y_neg_preds = svm_model.predict_proba(AN_dists)[0, 1]
+                y_pos_pred = (np.median(y_pos_preds) >= threshold)
+                y_neg_pred = (np.median(y_neg_preds) >= threshold)
+            else:
+                y_pos_preds = svm_model.predict(AP_dists)
+                y_neg_preds = svm_model.predict(AN_dists)
+                y_pos_pred = (np.sum(y_pos_preds) >= threshold * y_pos_preds.size)
+                y_neg_pred = (np.sum(y_neg_preds) >= threshold * y_neg_preds.size)
 
         elif ensemble_type == "average":  # Predict on average of the distances
-            AP_dist = np.abs(np.mean(AP_dists, axis=0)).reshape(1, -1)
-            AN_dist = np.abs(np.mean(AN_dists, axis=0)).reshape(1, -1)
-            y_pos_pred = (svm_model.predict_proba(AP_dist)[0, 1] >= threshold)
-            y_neg_pred = (svm_model.predict_proba(AN_dist)[0, 1] >= threshold)
+            AP_dist = np.mean(AP_dists, axis=0).reshape(1, -1)
+            AN_dist = np.mean(AN_dists, axis=0).reshape(1, -1)
+
+            if probability:
+                y_pos_pred = (svm_model.predict_proba(AP_dist)[0, 1] >= threshold)
+                y_neg_pred = (svm_model.predict_proba(AN_dist)[0, 1] >= threshold)
+            else:
+                y_pos_pred = svm_model.predict(AP_dist)
+                y_neg_pred = svm_model.predict(AN_dist)
 
         # Evaluate
         if y_pos_pred == 1:
@@ -124,7 +137,7 @@ def ensemble_accuracy_FAR_FRR(pair_distance_model, svm_model, X_test_separated, 
     return n_FA, n_FR, n_correct, n_trials
 
 
-def predict_and_evaluate(pair_distance_model, svm_model, X_test_separated, ensemble_size, ensemble_type, threshold):
+def predict_and_evaluate(pair_distance_model, svm_model, X_test_separated, ensemble_size, ensemble_type, threshold, probability):
     """
     Make predictions on X_test_separated (list of data per user)
     using pair_distance_model and svm_model, and ensembling of size ensemble_size.
@@ -137,7 +150,7 @@ def predict_and_evaluate(pair_distance_model, svm_model, X_test_separated, ensem
     for i in range(N_TRIALS):
         for user in range(n_users):
             n_FA, n_FR, n_correct, n_trials = ensemble_accuracy_FAR_FRR(pair_distance_model, svm_model, X_test_separated, user,
-                                                                        ensemble_size, ensemble_type, threshold)
+                                                                        ensemble_size, ensemble_type, threshold, probability)
             n_FA_tot += n_FA
             n_FR_tot += n_FR
             n_correct_tot += n_correct
@@ -171,6 +184,7 @@ def parse_args(args):
     if args.save_model_path is not None:
         assert os.path.isdir(args.save_model_path), "Save model path does not exist."
     if args.load_model_path is not None:
+        assert args.sweep is False, "Cannot load existing model when sweeping threshold."
         assert os.path.isfile(args.load_model_path), "Model to load does not exist."
 
 
@@ -219,7 +233,8 @@ def main():
         X_train, y_train = shuffle(X_train, y_train)
 
         # Train SVM
-        svm_model = svm.SVC(gamma='scale', verbose=True, probability=True)
+
+        svm_model = svm.SVC(gamma='scale', verbose=True, probability=args.sweep)
         svm_model.fit(X_train[:20000, :], y_train[:20000])
 
         # Save svm model
@@ -249,7 +264,7 @@ def main():
         accuracy_ERR = 0
         for threshold in np.arange(0, 1, THRESH_STEP):
             accuracy, FAR, FRR = predict_and_evaluate(pair_distance_model, svm_model, X_test_separated,
-                                                      args.ensemble_size, args.ensembe_type, threshold)
+                                                      args.ensemble_size, args.ensemble_type, threshold, probability=True)
             FARs.append(FAR)
             FRRs.append(FRR)
             if np.abs(FAR - FRR) < min_diff:
@@ -274,7 +289,7 @@ def main():
     else:  # if fixed threshold = 0.5
 
         accuracy, FAR, FRR = predict_and_evaluate(pair_distance_model, svm_model, X_test_separated,
-                                                  args.ensemble_size, args.ensemble_type, threshold=0.5)
+                                                  args.ensemble_size, args.ensemble_type, threshold=0.5, probability=False)
 
         print("\n---- Test Results ----")
         print("Accuracy = {}".format(accuracy))
