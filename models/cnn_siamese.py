@@ -414,14 +414,6 @@ def parse_args(args):
             else:
                 os.makedirs(args.save_weights_path)
 
-    if args.metrics_path is not None:
-        if not os.path.isdir(args.metrics_path):
-            response = input("Metrics path does not exist. Create it? (Y/n) >> ")
-            if response.lower() not in ["y", "yes", "1", ""]:
-                exit()
-            else:
-                os.makedirs(args.metrics_path)
-
 
 def main():
 
@@ -431,7 +423,6 @@ def main():
     parser.add_argument("-sW", "--save_weights_path", metavar="SAVE_WEIGHTS_PATH", default=None, help="Path to save trained weights to. If no path is specified checkpoints are not saved.")
     parser.add_argument("-sM", "--save_model_path", metavar="SAVE_MODEL_PATH", default=None, help="Path to save trained model to.")
     parser.add_argument("-l", "--load_path", metavar="LOAD_PATH", default=None, help="Path to load trained model from. If no path is specified model is trained from scratch.")
-    parser.add_argument("-m", "--metrics-path", metavar="METRICS_PATH", default=None, help="Path to save additional performance metrics to (for debugging purposes).")
     parser.add_argument("--PCA", metavar="PCA", default=False, help="If true, a PCA plot is saved.")
     parser.add_argument("--TSNE", metavar="TSNE", default=False, help="If true, a TSNE plot is saved.")
 

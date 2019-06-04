@@ -8,7 +8,6 @@ from sklearn import svm
 from keras.models import load_model, Model
 from keras.layers import Input, Lambda
 from keras.utils import CustomObjectScope
-import keras.backend as K
 
 import utils
 import cnn_siamese
@@ -229,7 +228,7 @@ def main():
         X_test_separated.append(X_test_j)
 
     # Predict and evaluate
-    if args.sweep: # if sweeping the threshold
+    if args.sweep:  # if sweeping the threshold
 
         FARs, FRRs = [], []
         min_diff = float("inf")
@@ -260,7 +259,7 @@ def main():
         plt.ylabel("FRR")
         plt.savefig("FRR_FAR.pdf")
 
-    else: # if fixed threshold = 0.5
+    else:  # if fixed threshold = 0.5
 
         random.seed(1)
         accuracy, FAR, FRR = predict_and_evaluate(pair_distance_model, svm_model, X_test_separated,
