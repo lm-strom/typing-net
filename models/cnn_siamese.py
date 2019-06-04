@@ -294,12 +294,13 @@ def setup_callbacks(save_path):
     Sets up callbacks for early stopping and model saving.
     """
 
-    signal.signal(signal.SIGINT, handler)
-
     callback_list = []
 
-    callback_list.append(TerminateOnFlag())  # Terminate training if CTRL+C
+    # Terminate training if CTRL+C
+    signal.signal(signal.SIGINT, handler)
+    callback_list.append(TerminateOnFlag())
 
+    # Save weights
     if save_path is not None:
         model_checkpoint = ModelCheckpoint(save_path + "_class_model_{epoch:02d}_{val_loss:.2f}.hdf5", monitor="val_loss", save_best_only=True, verbose=1, period=10)  # Save model every 10 epochs
         callback_list.append(model_checkpoint)
@@ -313,13 +314,6 @@ def _euclidean_distance(vects):
     """
     x, y = vects
     return K.sqrt(K.maximum(K.sum(K.square(x - y), axis=1, keepdims=True), K.epsilon()))
-
-
-def _cosine_distance(vects):
-    x, y = vects
-    x = K.l2_normalize(x, axis=-1)
-    y = K.l2_normalize(y, axis=-1)
-    return -K.mean(x * y, axis=-1, keepdims=True)
 
 
 def _cos_dist_output_shape(shapes):
@@ -358,11 +352,11 @@ def build_tower_cnn_model(input_shape):
     tower_3 = MaxPooling1D(3, strides=1, padding='same')(x)
     tower_3 = Conv1D(16, 1, padding='same', activation='relu')(tower_3)
 
-    x = keras.layers.concatenate([tower_1, tower_2, tower_3], axis = 2)
+    x = keras.layers.concatenate([tower_1, tower_2, tower_3], axis=2)
     x = GlobalAveragePooling1D()(x)
     x = BatchNormalization()(x)
     x = Activation("relu")(x)
-    #x = Flatten()(x)
+    # x = Flatten()(x)
 
     y = Dense(EMB_SIZE, name='dense_encoding')(x)
     y = Lambda(lambda x: K.l2_normalize(x, axis=1))(y)
