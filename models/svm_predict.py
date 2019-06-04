@@ -33,10 +33,10 @@ def build_pair_distance_model(tower_model, input_shape):
 
     tower_output_shape = tower_model.layers[-1].output_shape
 
-    abs_difference = Lambda(lambda z: K.abs(z[0] - z[1]), output_shape=tower_output_shape)
+    difference = Lambda(lambda z: z[0] - z[1], output_shape=tower_output_shape)
 
-    positive_pair_dist = abs_difference([embedd_anchor, embedd_positive])
-    negative_pair_dist = abs_difference([embedd_anchor, embedd_negative])
+    positive_pair_dist = difference([embedd_anchor, embedd_positive])
+    negative_pair_dist = difference([embedd_anchor, embedd_negative])
 
     pair_distance_model = Model(inputs=[input_anchor, input_positive, input_negative], outputs=[positive_pair_dist, negative_pair_dist])
 
@@ -52,7 +52,7 @@ def shuffle(X, y):
     return X, y
 
 
-def ensemble_accuracy_FAR_FRR(pair_distance_model, svm_model, X_test_separated, user, ensemble_size, threshold):
+def ensemble_accuracy_FAR_FRR(pair_distance_model, svm_model, X_test_separated, user, ensemble_size, ensemble_type, threshold):
     """
     Compute ensemble accuracy, FAR and FRR
     """
@@ -92,10 +92,20 @@ def ensemble_accuracy_FAR_FRR(pair_distance_model, svm_model, X_test_separated, 
 
         # Predict
         AP_dists, AN_dists = pair_distance_model.predict([anchors, positives, negatives])
-        y_pos_preds = svm_model.predict_proba(AP_dists)[0, 1]
-        y_neg_preds = svm_model.predict_proba(AN_dists)[0, 1]
-        y_pos_pred = (np.median(y_pos_preds) >= threshold)
-        y_neg_pred = (np.median(y_neg_preds) >= threshold)
+
+        if ensemble_type == "majority":  # Predict on all dists separately and majority vote
+            AP_dists = np.abs(AP_dists)
+            AN_dists = np.abs(AN_dists)
+            y_pos_preds = svm_model.predict_proba(AP_dists)[0, 1]
+            y_neg_preds = svm_model.predict_proba(AN_dists)[0, 1]
+            y_pos_pred = (np.median(y_pos_preds) >= threshold)
+            y_neg_pred = (np.median(y_neg_preds) >= threshold)
+
+        elif ensemble_type == "average":  # Predict on average of the distances
+            AP_dist = np.abs(np.mean(AP_dists, axis=0)).reshape(1, -1)
+            AN_dist = np.abs(np.mean(AN_dists, axis=0)).reshape(1, -1)
+            y_pos_pred = (svm_model.predict_proba(AP_dist)[0, 1] >= threshold)
+            y_neg_pred = (svm_model.predict_proba(AN_dist)[0, 1] >= threshold)
 
         # Evaluate
         if y_pos_pred == 1:
@@ -113,7 +123,7 @@ def ensemble_accuracy_FAR_FRR(pair_distance_model, svm_model, X_test_separated, 
     return n_FA, n_FR, n_correct, n_trials
 
 
-def predict_and_evaluate(pair_distance_model, svm_model, X_test_separated, ensemble_size, threshold):
+def predict_and_evaluate(pair_distance_model, svm_model, X_test_separated, ensemble_size, ensemble_type, threshold):
     """
     Make predictions on X_test_separated (list of data per user)
     using pair_distance_model and svm_model, and ensembling of size ensemble_size.
@@ -124,7 +134,8 @@ def predict_and_evaluate(pair_distance_model, svm_model, X_test_separated, ensem
     n_FA_tot, n_FR_tot, n_correct_tot = 0, 0, 0
     n_trials_tot = 0
     for user in range(n_users):
-        n_FA, n_FR, n_correct, n_trials = ensemble_accuracy_FAR_FRR(pair_distance_model, svm_model, X_test_separated, user, ensemble_size, threshold)
+        n_FA, n_FR, n_correct, n_trials = ensemble_accuracy_FAR_FRR(pair_distance_model, svm_model, X_test_separated, user,
+                                                                    ensemble_size, ensemble_type, threshold)
         n_FA_tot += n_FA
         n_FR_tot += n_FR
         n_correct_tot += n_correct
@@ -157,8 +168,10 @@ def parse_args(args):
         else:
             args.sweep = False
 
-    args.ensemble = int(args.ensemble)
-    assert args.ensemble <= 100, "Invalid ensemble value. Cannot have an ensemble > 100."
+    args.ensemble_size = int(args.ensemble_size)
+    assert args.ensemble_size <= 100, "Invalid ensemble value. Cannot have an ensemble > 100."
+
+    assert args.ensemble_type in ["majority", "average"], "Invalid ensembling type. Choose between majority and average."
 
 
 def main():
@@ -167,7 +180,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(dest="triplets_path", metavar="TRIPLETS_PATH", help="Path to read triplets from.")
     parser.add_argument(dest="model_path", metavar="MODEL_PATH", help="Path to read model from.")
-    parser.add_argument("-e", "--ensemble", metavar="ENSEMBLE", default=1, help="How many examples to ensemble when predicting. Default: 1")
+    parser.add_argument("-eS", "--ensemble_size", metavar="ENSEMBLE_SIZE", default=1, help="How many examples to ensemble when predicting. Default: 1")
+    parser.add_argument("-eT", "--ensemble_type", metavar="ENSEMBLE_TYPE", default="majority", help="Choices: majority, average. Default: majority.")
     parser.add_argument("-s", "--sweep", metavar="SWEEP", default=False, help="If true, evaluation threshold is sweeped and plot of FRR vs FAR is saved.")
     parser.add_argument("-b", "--read_batches", metavar="READ_BATCHES", default=False, help="If true, data is read incrementally in batches during training.")
     args = parser.parse_args()
@@ -223,7 +237,8 @@ def main():
         accuracy_ERR = 0
         for threshold in np.arange(0, 1, FRR_FAR_DISCRETE):
             np.random.seed(1)
-            accuracy, FAR, FRR = predict_and_evaluate(pair_distance_model, svm_model, X_test_separated, args.ensemble, threshold)
+            accuracy, FAR, FRR = predict_and_evaluate(pair_distance_model, svm_model, X_test_separated,
+                                                      args.ensemble_size, args.ensembe_type, threshold)
             FARs.append(FAR)
             FRRs.append(FRR)
             if np.abs(FAR - FRR) < min_diff:
@@ -247,7 +262,8 @@ def main():
 
     else:
 
-        accuracy, FAR, FRR = predict_and_evaluate(pair_distance_model, svm_model, X_test_separated, args.ensemble, threshold=0.5)
+        accuracy, FAR, FRR = predict_and_evaluate(pair_distance_model, svm_model, X_test_separated,
+                                                  args.ensemble_size, args.ensemble_type, threshold=0.5)
 
         print("\n---- Test Results ----")
         print("Accuracy = {}".format(accuracy))

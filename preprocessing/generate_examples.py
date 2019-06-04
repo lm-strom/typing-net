@@ -10,7 +10,6 @@ import h5py
 assert os.getcwd().split("/")[-1] == "typing-net", "Preprocessing scripts must run from typing-net/ directory."
 sys.path.insert(0, 'models/')  # so that utils can be imported
 import utils
-import generate_triplets
 
 # Constants
 FEATURE_LENGTH = 5
@@ -55,6 +54,102 @@ def create_examples(input_path, data_file, example_length):
     data_file.create_dataset("y_plain", data=y, maxshape=(None, n_users), dtype=float)
 
     return X, y
+
+
+def create_triplets(args, X_data_name, y_data_name, output_name, data_file, n_examples_per_anchor, triplet_model=None):
+    """
+    Takes a dataset X, y stored in a hdf5 file and generates one triplet (A, P, N)
+    for every example in X.
+
+    Each example in X is Anchor in one triplet. The Positive of each triplet is selected as a random
+    different example from the same user as Anchor. The Negative of each triplet is selected as a random
+    different example from a different user than Anchor.
+    """
+    WRITE_CHUNK_SIZE = 1000
+
+    n_examples = data_file[X_data_name].shape[0]
+    n_users = data_file[y_data_name].shape[1]
+
+    X_anchors = []
+    y_anchors = []
+    X_positives = []
+    y_positives = []
+    X_negatives = []
+    y_negatives = []
+
+    X_anchors_name = "X_" + output_name + "_anchors"
+    y_anchors_name = "y_" + output_name + "_anchors"
+    X_positives_name = "X_" + output_name + "_positives"
+    y_positives_name = "y_" + output_name + "_positives"
+    X_negatives_name = "X_" + output_name + "_negatives"
+    y_negatives_name = "y_" + output_name + "_negatives"
+
+    # Generate dictionary mapping user id to example indices
+    print("Preparing generation of triplets...")
+    user_ind_dict = {j: [] for j in range(n_users)}
+    for i in tqdm(range(n_examples)):
+        j = utils.one_hot_to_index(data_file[y_data_name][i, :])
+        user_ind_dict[j].append(i)
+
+    print("Creating triplets from single examples...")
+    for i in tqdm(range(n_examples)):
+
+        anchor_X = np.expand_dims(data_file[X_data_name][i, :, :], axis=0)
+        anchor_y = np.expand_dims(data_file[y_data_name][i, :], axis=0)
+
+        positives_inds = user_ind_dict[utils.one_hot_to_index(anchor_y[0])]
+
+        ii = 0
+        while ii < n_examples_per_anchor:
+            positive_choice = np.random.choice(positives_inds)
+            positive_X = np.expand_dims(data_file[X_data_name][positive_choice, :, :], axis=0)
+            positive_y = np.expand_dims(data_file[y_data_name][positive_choice, :, ], axis=0)
+
+            user_ids = list(user_ind_dict.keys())
+            user_ids.remove(utils.one_hot_to_index(anchor_y[0]))
+            random_user = np.random.choice(user_ids)
+            negatives_inds = user_ind_dict[random_user]
+            negative_choice = np.random.choice(negatives_inds)
+            negative_X = np.expand_dims(data_file[X_data_name][negative_choice, :, :], axis=0)
+            negative_y = np.expand_dims(data_file[y_data_name][negative_choice, :], axis=0)
+
+            if args.loss_thresh is not None and triplet_model is not None:
+                loss = triplet_model.predict([anchor_X, positive_X, negative_X])[0][0]
+                if loss < args.loss_thresh:
+                    continue
+
+            X_anchors.extend(anchor_X)
+            y_anchors.extend(anchor_y)
+            X_positives.extend(positive_X)
+            y_positives.extend(positive_y)
+            X_negatives.extend(negative_X)
+            y_negatives.extend(negative_y)
+
+            ii += 1
+
+        if len(X_anchors) >= WRITE_CHUNK_SIZE or i == n_examples - 1:
+
+            data_file[X_anchors_name].resize(data_file[X_anchors_name].shape[0] + len(X_anchors), axis=0)
+            data_file[X_anchors_name][-len(X_anchors):] = np.asarray(X_anchors)
+            data_file[y_anchors_name].resize(data_file[y_anchors_name].shape[0] + len(y_anchors), axis=0)
+            data_file[y_anchors_name][-len(y_anchors):] = np.asarray(y_anchors)
+
+            data_file[X_positives_name].resize(data_file[X_positives_name].shape[0] + len(X_positives), axis=0)
+            data_file[X_positives_name][-len(X_positives):] = np.asarray(X_positives)
+            data_file[y_positives_name].resize(data_file[y_positives_name].shape[0] + len(y_positives), axis=0)
+            data_file[y_positives_name][-len(y_positives):] = np.asarray(y_positives)
+
+            data_file[X_negatives_name].resize(data_file[X_negatives_name].shape[0] + len(X_negatives), axis=0)
+            data_file[X_negatives_name][-len(X_negatives):] = np.asarray(X_negatives)
+            data_file[y_negatives_name].resize(data_file[y_negatives_name].shape[0] + len(y_negatives), axis=0)
+            data_file[y_negatives_name][-len(y_negatives):] = np.asarray(y_negatives)
+
+            X_anchors = []
+            y_anchors = []
+            X_positives = []
+            y_positives = []
+            X_negatives = []
+            y_negatives = []
 
 
 def generate_examples_from_adjacents(X, y, dataset_name, data_file, step_size=1):
@@ -327,7 +422,7 @@ def main():
         data_file.create_dataset("y_train_negatives", shape=(0, n_users), maxshape=(None, n_users), dtype=float)
 
         # Generate training triplets
-        generate_triplets.create_triplets(args, "X_train", "y_train", output_name="train", n_examples_per_anchor=10, data_file=data_file)
+        create_triplets(args, "X_train", "y_train", output_name="train", n_examples_per_anchor=10, data_file=data_file)
 
         # Create datasets for triplet validation data
         data_file.create_dataset("X_valid_anchors", shape=(0, args.example_length, FEATURE_LENGTH),
@@ -343,7 +438,7 @@ def main():
         data_file.create_dataset("y_valid_negatives", shape=(0, n_users), maxshape=(None, n_users), dtype=float)
 
         # Generate validation triplets
-        generate_triplets.create_triplets(args, "X_valid", "y_valid", output_name="valid", n_examples_per_anchor=10, data_file=data_file)
+        create_triplets(args, "X_valid", "y_valid", output_name="valid", n_examples_per_anchor=10, data_file=data_file)
 
         # Split test by user into matrix
         split_all_users_multi_dataset("X_test", "y_test", "X_test", data_file)
