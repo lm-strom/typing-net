@@ -2,6 +2,7 @@ import os
 import argparse
 import random
 import pickle
+import itertools
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -14,8 +15,14 @@ import utils
 import cnn_siamese
 
 # Parameters
-THRESH_STEP = 0.05  # step size when sweeping threshold
+CLASS_WEIGHT_STEP = 0.1  # step size when sweeping threshold
 N_TRIALS = 1  # number of acceptance/rejection trials to do per example
+
+# SVM hyperparameters
+C = 1  # SVM constraint factor
+GAMMA = 1  # SVM kernel factor
+KERNEL = "rbf"  # SVM kernel
+CLASS_WEIGHTS = {0: 1.1, 1: 1}  # Weights to multiply with parameter C for each class
 
 
 def build_pair_distance_model(tower_model, input_shape):
@@ -221,8 +228,17 @@ def main():
     pair_distance_model = build_pair_distance_model(tower_model, X_shape[1:])
     pair_distance_model.compile(optimizer="adam", loss="mean_squared_error")  # Need to compile in order to predict
 
-    # If no svm model supplied, train ones
-    if args.load_model_path is None:
+    # Load test data
+    _, y_test_shape = utils.get_shapes(args.triplets_path, "test")
+    n_users = y_test_shape[1]
+    X_test_separated = []
+    for j in range(n_users):
+        X_test_j = utils.load_X(args.triplets_path, "test_" + str(j))
+        X_test_separated.append(X_test_j)
+
+    # If no svm model supplied, and no sweep:
+    # Train a new model
+    if args.load_model_path is None and not args.sweep:
 
         # Load training triplets and validation triplets
         X_train_anchors, _ = utils.load_examples(args.triplets_path, "train_anchors")
@@ -244,38 +260,58 @@ def main():
         X_train, y_train = shuffle(X_train, y_train)
 
         # Train SVM
-
-        svm_model = svm.SVC(gamma='scale', verbose=True, probability=args.sweep)
+        svm_model = svm.SVC(C=C, gamma=GAMMA, kernel=KERNEL, class_weight=CLASS_WEIGHTS, verbose=True, probability=False)
         svm_model.fit(X_train[:20000, :], y_train[:20000])
 
-        # Save svm model
-        if args.save_model_path is not None:
-            with open(args.save_model_path + "svm_model.pkl", "wb") as svm_file:
-                pickle.dump(svm_model, svm_file)
+        random.seed(1)
+        accuracy, FAR, FRR = predict_and_evaluate(pair_distance_model, svm_model, X_test_separated,
+                                                  args.ensemble_size, args.ensemble_type, threshold=0.5, probability=False)
 
-    else:  # if svm model supplied
+        print("\n---- Test Results ----")
+        print("Accuracy = {}".format(accuracy))
+        print("FAR = {}".format(FAR))
+        print("FRR = {}".format(FRR))
 
-        with open(args.load_model_path, "rb") as svm_file:
-            svm_model = pickle.load(svm_file)
+    # If no svm model supplied, but we want to sweep:
+    # Train models with a range of class weight values
+    elif args.load_model_path is None and args.sweep:
 
-    # Load test data
-    _, y_test_shape = utils.get_shapes(args.triplets_path, "test")
-    n_users = y_test_shape[1]
-    X_test_separated = []
-    for j in range(n_users):
-        X_test_j = utils.load_X(args.triplets_path, "test_" + str(j))
-        X_test_separated.append(X_test_j)
+        # Load training triplets and validation triplets
+        X_train_anchors, _ = utils.load_examples(args.triplets_path, "train_anchors")
+        X_train_positives, _ = utils.load_examples(args.triplets_path, "train_positives")
+        X_train_negatives, _ = utils.load_examples(args.triplets_path, "train_negatives")
 
-    # Predict and evaluate
-    if args.sweep:  # if sweeping the threshold
+        # Get abs(distance) of embeddings
+        X_train_ap, X_train_an, X_train_pn = pair_distance_model.predict([X_train_anchors, X_train_positives, X_train_negatives])
 
+        # Stack positive and negative examples
+        X_train = np.vstack((X_train_ap, X_train_an, X_train_pn))
+        y_train = np.hstack((np.ones(X_train_ap.shape[0], ), np.zeros(X_train_an.shape[0] + X_train_pn.shape[0],)))
+
+        # Sign of distances should not matter ->  Train on both
+        X_train = np.vstack((X_train, -X_train))
+        y_train = np.hstack((y_train, y_train))
+
+        # Shuffle the data
+        X_train, y_train = shuffle(X_train, y_train)
+
+        # Sweep the class weights
         FARs, FRRs = [], []
         min_diff = float("inf")
         FAR_EER, FRR_EER = 1, 1
         accuracy_ERR = 0
-        for threshold in np.arange(0, 1, THRESH_STEP):
+        class_weights = [{0: w1, 1: w2} for (w1, w2) in itertools.product(np.arange(0, 2, 0.1), repeat=2)]
+        for class_weight in class_weights:
+
+            # Train SVM
+            svm_model = svm.SVC(C=C, gamma=GAMMA, kernel=KERNEL, class_weight=CLASS_WEIGHTS, verbose=True, probability=False)
+            svm_model.fit(X_train[:20000, :], y_train[:20000])
+
+            # Predict and evaluate
             accuracy, FAR, FRR = predict_and_evaluate(pair_distance_model, svm_model, X_test_separated,
-                                                      args.ensemble_size, args.ensemble_type, threshold, probability=True)
+                                                      args.ensemble_size, args.ensemble_type, threshold=0.5, probability=False)
+
+            # Store results
             FARs.append(FAR)
             FRRs.append(FRR)
             if np.abs(FAR - FRR) < min_diff:
@@ -297,7 +333,10 @@ def main():
         plt.ylabel("FRR")
         plt.savefig("FRR_FAR.pdf")
 
-    else:  # if fixed threshold = 0.5
+    else:  # if svm model supplied
+
+        with open(args.load_model_path, "rb") as svm_file:
+            svm_model = pickle.load(svm_file)
 
         random.seed(1)
         accuracy, FAR, FRR = predict_and_evaluate(pair_distance_model, svm_model, X_test_separated,
@@ -307,6 +346,11 @@ def main():
         print("Accuracy = {}".format(accuracy))
         print("FAR = {}".format(FAR))
         print("FRR = {}".format(FRR))
+
+    # Save svm model
+    if args.save_model_path is not None:
+        with open(args.save_model_path + "svm_model.pkl", "wb") as svm_file:
+            pickle.dump(svm_model, svm_file)
 
 
 if __name__ == "__main__":
