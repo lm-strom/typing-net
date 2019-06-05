@@ -21,7 +21,7 @@ N_TRIALS = 1  # number of acceptance/rejection trials to do per example
 C = 1  # SVM constraint factor
 GAMMA = 1  # SVM kernel factor
 KERNEL = "rbf"  # SVM kernel
-CLASS_WEIGHTS = {0: 1.1, 1: 1}  # Weights to multiply with parameter C for each class
+CLASS_WEIGHTS = {0: 1, 1: 1}  # Weights to multiply with parameter C for each class
 
 
 def build_pair_distance_model(tower_model, input_shape):
