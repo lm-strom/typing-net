@@ -15,7 +15,7 @@ import cnn_siamese
 
 # Parameters
 THRESH_STEP = 0.05  # step size when sweeping threshold
-N_TRIALS = 100  # number of acceptance/rejection trials to do per example
+N_TRIALS = 1  # number of acceptance/rejection trials to do per example
 
 
 def build_pair_distance_model(tower_model, input_shape):
@@ -36,10 +36,11 @@ def build_pair_distance_model(tower_model, input_shape):
 
     difference = Lambda(lambda z: z[0] - z[1], output_shape=tower_output_shape)
 
-    positive_pair_dist = difference([embedd_anchor, embedd_positive])
-    negative_pair_dist = difference([embedd_anchor, embedd_negative])
+    ap_dist = difference([embedd_anchor, embedd_positive])
+    an_dist = difference([embedd_anchor, embedd_negative])
+    pn_dist = difference([embedd_positive, embedd_negative])
 
-    pair_distance_model = Model(inputs=[input_anchor, input_positive, input_negative], outputs=[positive_pair_dist, negative_pair_dist])
+    pair_distance_model = Model(inputs=[input_anchor, input_positive, input_negative], outputs=[ap_dist, an_dist, pn_dist])
 
     return pair_distance_model
 
@@ -93,22 +94,28 @@ def ensemble_accuracy_FAR_FRR(pair_distance_model, svm_model, X_test_separated, 
         negatives = np.squeeze(np.array(negatives), axis=1)
 
         # Predict
-        AP_dists, AN_dists = pair_distance_model.predict([anchors, positives, negatives])
+        AP_dists, AN_dists, _ = pair_distance_model.predict([anchors, positives, negatives])
 
         if ensemble_type == "majority":  # Predict on all dists separately and majority vote
-            AP_dists = AP_dists
-            AN_dists = AN_dists
 
             if probability:
                 y_pos_preds = svm_model.predict_proba(AP_dists)[0, 1]
+                y_pos_preds = np.hstack((y_pos_preds, svm_model.predict_proba(-AP_dists)[0, 1]))
+
                 y_neg_preds = svm_model.predict_proba(AN_dists)[0, 1]
+                y_neg_preds = np.hstack((y_neg_preds, svm_model.predict_proba(-AN_dists)[0, 1]))
+
                 y_pos_pred = (np.median(y_pos_preds) >= threshold)
                 y_neg_pred = (np.median(y_neg_preds) >= threshold)
             else:
-                y_pos_preds = svm_model.predict(AP_dists)
-                y_neg_preds = svm_model.predict(AN_dists)
-                y_pos_pred = (np.sum(y_pos_preds) >= threshold * y_pos_preds.size)
-                y_neg_pred = (np.sum(y_neg_preds) >= threshold * y_neg_preds.size)
+                y_pos_preds_plus = svm_model.predict(AP_dists)
+                y_pos_preds_minus = svm_model.predict(-AP_dists)
+
+                y_neg_preds_plus = svm_model.predict(AN_dists)
+                y_neg_preds_minus = svm_model.predict(-AN_dists)
+
+                y_pos_pred = (np.sum(y_pos_preds_plus) + np.sum(y_pos_preds_minus) >= threshold * (y_pos_preds_plus.size + y_pos_preds_minus.size))
+                y_neg_pred = (np.sum(y_neg_preds_plus) + np.sum(y_neg_preds_minus) >= threshold * (y_neg_preds_plus.size + y_neg_preds_minus.size))
 
         elif ensemble_type == "average":  # Predict on average of the distances
             AP_dist = np.mean(AP_dists, axis=0).reshape(1, -1)
@@ -223,11 +230,15 @@ def main():
         X_train_negatives, _ = utils.load_examples(args.triplets_path, "train_negatives")
 
         # Get abs(distance) of embeddings
-        X_train_1, X_train_0 = pair_distance_model.predict([X_train_anchors, X_train_positives, X_train_negatives])
+        X_train_ap, X_train_an, X_train_pn = pair_distance_model.predict([X_train_anchors, X_train_positives, X_train_negatives])
 
         # Stack positive and negative examples
-        X_train = np.vstack((X_train_1, X_train_0))
-        y_train = np.hstack((np.ones(X_train_1.shape[0], ), np.zeros(X_train_0.shape[0],)))
+        X_train = np.vstack((X_train_ap, X_train_an, X_train_pn))
+        y_train = np.hstack((np.ones(X_train_ap.shape[0], ), np.zeros(X_train_an.shape[0] + X_train_pn.shape[0],)))
+
+        # Sign of distances should not matter ->  Train on both
+        X_train = np.vstack((X_train, -X_train))
+        y_train = np.hstack((y_train, y_train))
 
         # Shuffle the data
         X_train, y_train = shuffle(X_train, y_train)
