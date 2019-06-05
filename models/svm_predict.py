@@ -2,7 +2,6 @@ import os
 import argparse
 import random
 import pickle
-import itertools
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -238,7 +237,7 @@ def main():
 
     # If no svm model supplied, and no sweep:
     # Train a new model
-    if args.load_model_path is None and not args.sweep:
+    if args.load_model_path is None:
 
         # Load training triplets and validation triplets
         X_train_anchors, _ = utils.load_examples(args.triplets_path, "train_anchors")
@@ -260,8 +259,13 @@ def main():
         X_train, y_train = shuffle(X_train, y_train)
 
         # Train SVM
-        svm_model = svm.SVC(C=C, gamma=GAMMA, kernel=KERNEL, class_weight=CLASS_WEIGHTS, verbose=True, probability=False)
+        svm_model = svm.SVC(C=C, gamma=GAMMA, kernel=KERNEL, class_weight=CLASS_WEIGHTS, verbose=True, probability=args.sweep)
         svm_model.fit(X_train[:20000, :], y_train[:20000])
+
+    else:  # if svm model supplied
+
+        with open(args.load_model_path, "rb") as svm_file:
+            svm_model = pickle.load(svm_file)
 
         random.seed(1)
         accuracy, FAR, FRR = predict_and_evaluate(pair_distance_model, svm_model, X_test_separated,
@@ -272,44 +276,19 @@ def main():
         print("FAR = {}".format(FAR))
         print("FRR = {}".format(FRR))
 
-    # If no svm model supplied, but we want to sweep:
-    # Train models with a range of class weight values
-    elif args.load_model_path is None and args.sweep:
+    if args.sweep:
 
-        # Load training triplets and validation triplets
-        X_train_anchors, _ = utils.load_examples(args.triplets_path, "train_anchors")
-        X_train_positives, _ = utils.load_examples(args.triplets_path, "train_positives")
-        X_train_negatives, _ = utils.load_examples(args.triplets_path, "train_negatives")
-
-        # Get abs(distance) of embeddings
-        X_train_ap, X_train_an, X_train_pn = pair_distance_model.predict([X_train_anchors, X_train_positives, X_train_negatives])
-
-        # Stack positive and negative examples
-        X_train = np.vstack((X_train_ap, X_train_an, X_train_pn))
-        y_train = np.hstack((np.ones(X_train_ap.shape[0], ), np.zeros(X_train_an.shape[0] + X_train_pn.shape[0],)))
-
-        # Sign of distances should not matter ->  Train on both
-        X_train = np.vstack((X_train, -X_train))
-        y_train = np.hstack((y_train, y_train))
-
-        # Shuffle the data
-        X_train, y_train = shuffle(X_train, y_train)
-
-        # Sweep the class weights
+        # Sweep the threshold
         FARs, FRRs = [], []
         min_diff = float("inf")
         FAR_EER, FRR_EER = 1, 1
-        accuracy_ERR = 0
-        class_weights = [{0: w1, 1: w2} for (w1, w2) in itertools.product(np.arange(0, 2, 0.1), repeat=2)]
-        for class_weight in class_weights:
-
-            # Train SVM
-            svm_model = svm.SVC(C=C, gamma=GAMMA, kernel=KERNEL, class_weight=CLASS_WEIGHTS, verbose=True, probability=False)
-            svm_model.fit(X_train[:20000, :], y_train[:20000])
+        accuracy_EER = 0
+        threshold_EER = None
+        for threshold in np.arange(0, 1, 0.01):
 
             # Predict and evaluate
             accuracy, FAR, FRR = predict_and_evaluate(pair_distance_model, svm_model, X_test_separated,
-                                                      args.ensemble_size, args.ensemble_type, threshold=0.5, probability=False)
+                                                      args.ensemble_size, args.ensemble_type, threshold=threshold, probability=True)
 
             # Store results
             FARs.append(FAR)
@@ -317,26 +296,25 @@ def main():
             if np.abs(FAR - FRR) < min_diff:
                 FAR_EER = FAR
                 FRR_EER = FRR
-                accuracy_ERR = accuracy
+                accuracy_EER = accuracy
+                threshold_EER = threshold
                 min_diff = np.abs(FAR - FRR)
 
         # Report EER and corresponding accuracy
         print("\n ---- Test Results: EER ----")
-        print("Accuracy = {}".format(accuracy_ERR))
+        print("Accuracy = {}".format(accuracy_EER))
         print("FAR = {}".format(FAR_EER))
         print("FRR = {}".format(FRR_EER))
+        print("Threshold EER = {}".format(threshold_EER))
 
         # Plot FRR vs FAR
         plt.figure()
-        plt.plot(FARs, FRRs)
+        plt.scatter(FARs, FRRs)
         plt.xlabel("FAR")
         plt.ylabel("FRR")
         plt.savefig("FRR_FAR.pdf")
 
-    else:  # if svm model supplied
-
-        with open(args.load_model_path, "rb") as svm_file:
-            svm_model = pickle.load(svm_file)
+    else:  # no sweep
 
         random.seed(1)
         accuracy, FAR, FRR = predict_and_evaluate(pair_distance_model, svm_model, X_test_separated,
