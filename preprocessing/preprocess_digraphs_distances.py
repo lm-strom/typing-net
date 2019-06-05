@@ -6,22 +6,24 @@ import numpy as np
 
 from tqdm import tqdm
 
-KEYS = [["", "D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "D9", "D0", "", "", "", "Back"], 
-    ["", "Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"], 
-    ["", "A", "S", "D", "F", "G", "H", "J", "K", "L",],
-    ["LShiftKey", "Z", "X", "C", "V", "B", "N", "M", "Oemcomma", "OemPeriod", "", "RShiftKey"], 
-    ["","","","","","Space", "Space", "Space", "Space", "Space" ]]
+KEYS = [["", "D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "D9", "D0", "", "", "", "Back"],
+        ["", "Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"],
+        ["", "A", "S", "D", "F", "G", "H", "J", "K", "L"],
+        ["LShiftKey", "Z", "X", "C", "V", "B", "N", "M", "Oemcomma", "OemPeriod", "", "RShiftKey"],
+        ["", "", "", "", "", "Space", "Space", "Space", "Space", "Space"]]
 
 KEYS_FLAT = ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P", "A",
-        "S", "D", "F", "G", "H", "J", "K", "L", "Z", "X", "C",
-        "V", "B", "N", "M", "Space", "LShiftKey", "RShiftKey",
-        "Back", "Oemcomma", "OemPeriod", "D0", "D1", "D2", "D3",
-        "D4", "D5", "D6", "D7", "D8", "D9"]
+             "S", "D", "F", "G", "H", "J", "K", "L", "Z", "X", "C",
+             "V", "B", "N", "M", "Space", "LShiftKey", "RShiftKey",
+             "Back", "Oemcomma", "OemPeriod", "D0", "D1", "D2", "D3",
+             "D4", "D5", "D6", "D7", "D8", "D9"]
+
 
 def index_2d(myList, v):
     for i, x in enumerate(myList):
         if v in x:
             return (i, x.index(v))
+
 
 def parse_raw_data(read_path, write_path):
 
@@ -68,14 +70,15 @@ def parse_raw_data(read_path, write_path):
                     break
                 try:
                     ht1 = int(pressedKeys[i][2]) - int(pressedKeys[i][1])
-                    ht2 = int(pressedKeys[i+1][2]) - int(pressedKeys[i+1][1])
-                    ptp = int(pressedKeys[i+1][1]) - int(pressedKeys[i][1])
-                    rtp = int(pressedKeys[i+1][1]) - int(pressedKeys[i][2])
+                    ht2 = int(pressedKeys[i + 1][2]) - int(pressedKeys[i + 1][1])
+                    ptp = int(pressedKeys[i + 1][1]) - int(pressedKeys[i][1])
+                    rtp = int(pressedKeys[i + 1][1]) - int(pressedKeys[i][2])
                     key1 = pressedKeys[i][0]
-                    key2 = pressedKeys[i+1][0]
+                    key2 = pressedKeys[i + 1][0]
                     if ptp < 1000 and abs(rtp) < 1000:
-                        keyDistance = np.sum(np.absolute(np.array(index_2d(KEYS, key1)) - np.array(index_2d(KEYS, key2))))
-                        output.append((keyDistance, ht1, ht2, ptp, rtp))
+                        # keyDistance = np.sum(np.absolute(np.array(index_2d(KEYS, key1)) - np.array(index_2d(KEYS, key2))))
+                        keyDistance = np.array(index_2d(KEYS, key1)) - np.array(index_2d(KEYS, key2))
+                        output.append((keyDistance[0], keyDistance[1], ht1, ht2, ptp, rtp))
                 except:
                     pass
 
